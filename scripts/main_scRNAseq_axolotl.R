@@ -1,7 +1,7 @@
 ##########################################################################
 ##########################################################################
 # Project: Collaboration with Sabine and Sebastian from Cologne
-# Script purpose: analyze the 
+# Script purpose: analyze macrophage subtypes from Natasya's data
 # Usage example: 
 # Author: Jingkui Wang (jingkui.wang@imp.ac.at)
 # Date of creation: Fri Jan 13 11:01:15 2023
@@ -10,7 +10,7 @@
 rm(list = ls())
 
 library(Seurat)
-library(decoupleR)
+#library(decoupleR)
 library(tictoc)
 library(dplyr)
 library(tibble)
@@ -22,14 +22,14 @@ library(RColorBrewer)
 library(data.table)
 library("viridis")
 
-version.analysis = '_axolotl_20250702'
-resDir = paste0("../results/scRNAseq_analysis_immune", version.analysis)
-RdataDir = paste0(resDir, '/Rdata')
+version.analysis = '_axolotl_20250829'
+resDir = paste0("../results/scRNAseq_analysis_immune", version.analysis, '/')
+RdataDir = paste0('../results/Rdata/')
 
 if(!dir.exists(resDir)) dir.create(resDir)
 if(!dir.exists(RdataDir)) dir.create(RdataDir)
 
-dataDir = '../fromTobie/CSD_batch1_batch2/'
+dataDir = '/groups/tanaka/People/current/jiwang/projects/bone_healing_CSD/fromTobie/CSD_batch1_batch2/'
 
 functionDir = '/groups/tanaka/People/current/jiwang/projects/heart_regeneration/scripts'
 source('/groups/tanaka/People/current/jiwang/projects/heart_regeneration/scripts/functions_scRNAseq.R')
@@ -51,6 +51,18 @@ convert_to_geneSymbol = function(gene.ids, annot)
   
 }
 
+#### TFs and  gene example of signaling pathways 
+tfs = readRDS(file = paste0('/groups/tanaka/People/current/jiwang/projects/RA_competence/data',
+                            '/annotations/curated_human_TFs_Lambert.rds'))
+tfs = unique(tfs$`HGNC symbol`)
+
+sps = readRDS(file = paste0("/groups/tanaka/People/current/jiwang/projects/RA_competence/",
+                            '/data/annotations/curated_signaling.pathways_gene.list_v3.rds'))
+sps = unique(sps$gene)
+sps = toupper(sps)
+
+
+## color schema 
 levels = c('CSD_0dpa', 
            'BL_3and5dpa', 'BL_5dpa', 'BL_6dpa', 'BL_7dpa',  'BL_8dpa', 'BL_11dpa', 
            'CSD_3dpa', 'CSD_5dpa', 'CSD_6dpa', 'CSD_7dpa', 'CSD_8dpa', 'CSD_11dpa')
@@ -62,17 +74,6 @@ cols[1] = 'gray60'
 #cols[1:3] = viridis(3)
 cols[2:7] = colorRampPalette((brewer.pal(n = 6, name ="Blues")))(6)
 cols[8:13] = colorRampPalette((brewer.pal(n = 6, name ="OrRd")))(6)
-
-## gene example of signaling pathways 
-sps = readRDS(file = paste0("/groups/tanaka/People/current/jiwang/projects/RA_competence/",
-                            '/data/annotations/curated_signaling.pathways_gene.list_v3.rds'))
-sps = unique(sps$gene)
-sps = toupper(sps)
-
-## TFs 
-tfs = readRDS(file = paste0('/groups/tanaka/People/current/jiwang/projects/RA_competence/data',
-                            '/annotations/curated_human_TFs_Lambert.rds'))
-tfs = unique(tfs$`HGNC symbol`)
 
 
 ########################################################
@@ -173,6 +174,32 @@ saveRDS(aa, file = paste0(RdataDir,
                           '/axoltol_limb_Blatema_twoBacthes_harmonyMerged_fromTobi_',
                           'filterCelltypes_geneNames.rds'))
 
+##########################################
+# subset batch 1 day3, 8, 11 
+##########################################
+aa = subset(aa, cells = colnames(aa)[which(aa$batch == 'batch1')])
+
+aa = NormalizeData(aa, normalization.method = "LogNormalize", scale.factor = 10000)
+aa <- FindVariableFeatures(aa, selection.method = "vst", nfeatures = 8000) # find subset-specific HVGs
+
+aa <- ScaleData(aa)
+aa <- RunPCA(aa, features = VariableFeatures(object = aa), verbose = FALSE, weight.by.var = TRUE)
+
+ElbowPlot(aa, ndims = 50)
+
+aa <- RunUMAP(aa, reduction = "pca", dims = 1:50, n.neighbors = 50,  min.dist = 0.3)
+
+p1 = DimPlot(aa, group.by = 'time', label = TRUE, repel = TRUE)
+p2 = DimPlot(aa, group.by = 'celltype', label = TRUE, repel = TRUE)
+
+p1 + p2
+
+ggsave(filename = paste0(resDir, '/Tobie_batch1Data_umap_axloltol_BL_celltypes.pdf'), 
+       width = 14, height = 6)
+
+
+saveRDS(aa, file = paste0(RdataDir, 
+                          '/axoltol_limbBlatema_batch1_fromTobi_filterCelltypes_geneNames.rds'))
 
 ########################################################
 ########################################################
@@ -183,81 +210,87 @@ saveRDS(aa, file = paste0(RdataDir,
 ########################################################
 ########################################################
 aa = readRDS(file = paste0(RdataDir, 
-                           '/axoltol_limb_Blatema_twoBacthes_harmonyMerged_fromTobi_',
-                           'filterCelltypes_geneNames.rds'))
-
-aa = NormalizeData(aa, normalization.method = "LogNormalize", scale.factor = 10000)
-aa <- FindVariableFeatures(aa, selection.method = "vst", nfeatures = 8000) # find subset-specific HVGs
-
-aa <- ScaleData(aa)
-
+                           '/axoltol_limbBlatema_batch1_fromTobi_filterCelltypes_geneNames.rds'))
 
 ggs = rownames(aa)
 ggs = get_geneName(ggs)
 
+p1 = DimPlot(aa, group.by = 'time', label = TRUE, repel = TRUE)
+p2 = DimPlot(aa, group.by = 'celltype', label = TRUE, repel = TRUE)
+
+p1 + p2
 
 ##########################################
-# "don't eat me" pathway
+# subset macrophage and subclustering
 ##########################################
-markers = c('CD47', "MER6","IAP", 'SIRPA', 'CD24', 'QPTC', 'QPTCL', 'B2M', 'AXL', "HAVCR2", "TIMD4",
-            'CD274', 'PDCD1')
+xx = readxl::read_xlsx(paste0('../../bone_healing_CSD/Cell_marker_Mouse.xlsx'), 
+                       sheet = 1)
+kk = grep('macrophage|Macrophage', xx$cell_name)
+xx = xx[kk, ]
+xx = data.frame(xx)
 
-mm = match(markers, ggs)
-mm = mm[which(!is.na(mm))]
-
-FeaturePlot(aa, features = rownames(aa)[mm]) 
-  #&
-  #scale_color_distiller(palette = "RdYlBu")
-  #scale_color_viridis_c()
-ggsave(filename = paste0(resDir, '/Tobie_umap.harmony_axloltol_limbBlatema_donotEatMePathway.pdf'), 
-       width = 8, height = 12)
+write.table(xx, file = '../data/Cell_marker_Mouse_macrophages.txt', 
+            sep = '\t', quote = FALSE, col.names = TRUE, row.names = FALSE)
 
 
-##########################################
-# senescence markers 
-##########################################
-markers = c('TP53', 'CDKN1A', "CDKN2A", "LMNB1", 
-            "RB1", 'TP53BP1', 'MKI67')
-mm = match(markers, ggs)
-mm = mm[which(!is.na(mm))]
+subs = subset(aa, cells = colnames(aa)[which(aa$celltype == "Macrophages")])
 
-pdf(paste0(resDir, '/Tobie_umap.harmony_axloltol_limbBlatema_senescenceMarkers_time.pdf'), 
-    height = 6, width =20, useDingbats = FALSE)
-for(i in mm)
-{
-  p1 = FeaturePlot(aa, features = rownames(aa)[i], split.by = 'time') 
-  plot(p1)
-  
-}
+subs = NormalizeData(subs, normalization.method = "LogNormalize", scale.factor = 10000)
+subs <- FindVariableFeatures(subs, selection.method = "vst", nfeatures = 3000) # find subset-specific HVGs
 
-dev.off()
+subs <- ScaleData(subs, features = rownames(subs))
+subs <- RunPCA(subs, features = VariableFeatures(object = subs), verbose = FALSE, weight.by.var = TRUE)
 
-ggsave(filename = paste0(resDir, '/Tobie_umap.harmony_axloltol_limbBlatema_senescenceMarkers.pdf'), 
-       width = 8, height = 12)
+subs <- RunUMAP(subs, reduction = "pca", dims = 1:50, n.neighbors = 50,  min.dist = 0.3)
 
-##########################################
-# macrophage markers
-##########################################
-Idents(aa) = factor(aa$celltype)
-oupMarker <- FindAllMarkers(aa)
+p1 = DimPlot(subs, group.by = 'time', label = TRUE, repel = TRUE)
+p2 = DimPlot(subs, group.by = 'Phase', label = TRUE, repel = TRUE)
+
+p1 + p2
+
+ggsave(filename = paste0(resDir, '/Tobie_batch1Data_umap_axloltol_BL_celltypes_macrophage.pdf'), 
+       width = 14, height = 6)
+
+ElbowPlot(subs, ndims = 30)
+
+subs <- FindNeighbors(subs, dims = 1:20)
+subs <- FindClusters(subs, verbose = FALSE, algorithm = 3, resolution = 0.7)
+
+DimPlot(subs, label = TRUE, repel = TRUE)
+
+ggsave(filename = paste0(resDir, '/Tobie_batch1Data_umap_axloltol_BL_celltypes_macrophage_subclustering.pdf'), 
+       width = 10, height = 6)
+
+subs$clusters = subs$seurat_clusters
+
+Idents(subs) = factor(subs$clusters)
+oupMarker <- FindAllMarkers(subs)
+
+oupMarker %>%
+  group_by(cluster) %>%
+  dplyr::filter(avg_log2FC > 1.0) %>%
+  slice_head(n = 15) %>%
+  ungroup() -> top10
+DoHeatmap(subs, features = top10$gene) + NoLegend()
+
+
+ggsave(filename = paste0(resDir, 
+                         '/Tobie_batch1Data_umap_axloltol_BL_celltypes_macrophage_subclustering_top10Markers.pdf'), 
+       width = 8, height = 16)
+
 oupMarker <- data.table(oupMarker)
 oupMarker$pct.diff = oupMarker$pct.1 - oupMarker$pct.2
 oupMarker <- oupMarker[, c("cluster","gene","avg_log2FC","pct.1","pct.2",
                            "pct.diff","p_val","p_val_adj")]
 #fwrite(oupMarker, sep = "\t", file = "images/clustMarkers.txt")
-aa@misc$marker <- oupMarker      # Store markers into Seurat object
+#aa@misc$marker <- oupMarker      # Store markers into Seurat object
 
 # Get top genes for each cluster and do dotplot / violin plot
 #oupMarker$cluster = factor(oupMarker$cluster, levels = reorderCluster)
 oupMarker = oupMarker[order(cluster, -avg_log2FC)]
 #genes.to.plot <- knownGenes
 
-oupMarker = oupMarker[which(oupMarker$cluster == 'Macrophages'), ]
-
-xx = readxl::read_xlsx('../Cell_marker_Mouse.xlsx', sheet = 1)
-kk = grep('macrophage|Macrophage', xx$cell_name)
-xx = xx[kk, ]
-xx = data.frame(xx)
+#oupMarker = oupMarker[which(oupMarker$cluster == 'Macrophages'), ]
 
 markers = unique(c(xx$Symbol, xx$marker))
 markers = markers[!is.na(markers)]
@@ -270,15 +303,36 @@ oupMarker = oupMarker[which(!is.na(mm)), ]
 write.table(oupMarker, file = paste0(resDir, '/macrophage_markers_detected_inAxolotl.txt'), 
             sep = '\t', quote = FALSE, row.names = FALSE, col.names = TRUE)
 
-DotPlot(aa, features = oupMarker$gene[1:50], 
-        group.by = "celltype"
-) +
-  geom_point(aes(size=pct.exp), shape = 21, colour="black", stroke=0.5) +
-  scale_colour_viridis(option="magma") +
-  guides(size=guide_legend(override.aes=list(shape=21, colour="black", fill="white"))) +
-  RotatedAxis() + 
-  coord_flip() 
 
-ggsave(filename = paste0(resDir, '/macrophage_markers_detected_inAxolotl_top50.pdf'), 
+oupMarker %>%
+  group_by(cluster) %>%
+  dplyr::filter(avg_log2FC > 1.0) %>%
+  slice_head(n = 15) %>%
+  ungroup() -> top10
+DoHeatmap(subs, features = top10$gene) + NoLegend()
+
+ggsave(filename = paste0(resDir, 
+                         '/Tobie_batch1Data_umap_axloltol_BL_celltypes_macrophage_subclustering_',
+                         'top10_annotatedMouseMarkers.pdf'), 
        width = 8, height = 16)
+
+
+##########################################
+# quickly check the macrophage subtype markers 
+##########################################
+# https://www.biocompare.com/Editorial-Articles/566347-A-Guide-to-Macrophage-Markers/
+markers = c('ADGRE1', 'CD14', 'CD68', 'CX3CR1', 'ITGAM', # pan macrophage
+            'TLR2', 'NOS2', 'CD80', 'CD86', 'IFNG', # M1
+             'ARG1', 'CD163', 'IL4', 'IRF4', 'MRC1' # M2
+            )
+
+mm = match(markers, ggs)
+mm = mm[which(!is.na(mm))]
+
+FeaturePlot(subs, features = rownames(aa)[mm]) 
+  #&
+  #scale_color_distiller(palette = "RdYlBu")
+  #scale_color_viridis_c()
+ggsave(filename = paste0(resDir, '/Tobie_umap.harmony_axloltol_limbBlatema_someGeneMarkers.pdf'), 
+       width = 8, height = 12)
 
