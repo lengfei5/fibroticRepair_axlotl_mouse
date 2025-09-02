@@ -10,6 +10,7 @@
 rm(list = ls())
 
 library(Seurat)
+library(SeuratObject)
 #library(decoupleR)
 library(tictoc)
 library(dplyr)
@@ -21,9 +22,10 @@ library(pheatmap)
 library(RColorBrewer)
 library(data.table)
 library("viridis")
+library(DropletUtils)
 
 species = 'mouse'
-version.analysis = '_20250829'
+version.analysis = '_mouse_20250829'
 resDir = paste0("../results/scRNAseq_analysis_immune", version.analysis, '/')
 RdataDir = paste0('../results/Rdata/')
 
@@ -33,6 +35,9 @@ if(!dir.exists(RdataDir)) dir.create(RdataDir)
 functionDir = '/groups/tanaka/People/current/jiwang/projects/heart_regeneration/scripts'
 source('/groups/tanaka/People/current/jiwang/projects/heart_regeneration/scripts/functions_scRNAseq.R')
 source('/groups/tanaka/People/current/jiwang/projects/heart_regeneration/scripts/functions_Visium.R')
+
+levels = c('ctl_dpi0', 'ctl_dpi4',  'ctl_dpi7', 'ctl_dpi14')
+
 
 ########################################################
 ########################################################
@@ -46,7 +51,7 @@ design = cbind(c(310697, 228615, 228613, 228611),
 design = data.frame(design)
 colnames(design) = c('sampleID', 'condition')
 
-design = design[-1, ]
+#design = design[-1, ]
 
 # design = design[which(design$sampleID != '196323'), ]
 
@@ -56,7 +61,7 @@ for(n in 1:nrow(design))
   # n = 1
   cat(n, ' : ', design$condition[n], '\n')
   
-  topdir = paste0(dataDir, design$sampleID[n], '/outs/filtered_feature_bc_matrix/')
+  topdir = paste0(dataDir, design$sampleID[n], '/outs/raw_feature_bc_matrix/')
   exp = Matrix::readMM(paste0(topdir, "matrix.mtx.gz")) #read matrix
   bc = read.csv(paste0(topdir, "/barcodes.tsv.gz"), header = F, stringsAsFactors = F)
   g = read.csv(paste0(topdir, "/features.tsv.gz"), header = F, stringsAsFactors = F, sep = '\t')
@@ -75,8 +80,8 @@ for(n in 1:nrow(design))
   rm(exp);
   
   # get emptyDrops and default cutoff cell estimates
-  #iscell_dd = defaultDrops(count.data, expected = 8000) # default cell estimate, similar to 10x cellranger
-  #sum(iscell_dd, na.rm=TRUE)
+  iscell_dd = defaultDrops(count.data, expected = 12000) # default cell estimate, similar to 10x cellranger
+  cat(sum(iscell_dd, na.rm=TRUE), ' cells found in ', design$condition[n], '\n')
   
   ## not used the emptyDrops too slow 
   # eout = emptyDrops(count.data, lower = 200)
@@ -84,55 +89,66 @@ for(n in 1:nrow(design))
   # iscell_ed = eout$FDR<=0.01
   # sum(iscell_ed, na.rm=TRUE)
   
-  meta = data.frame(row.names = colnames(count.data), condition = rep(design$condition[n], ncol(count.data)))
+  meta = data.frame(row.names = colnames(count.data), condition = rep(design$condition[n], ncol(count.data)),
+                    iscell_dd = iscell_dd)
   
   # plot rankings for number of UMI
-  # br.out <- barcodeRanks(count.data)
-  # 
-  # pdf(paste0(resDir, "/UMIrank_emptyDrop_", design$condition[n], "_", design$sampleID[n],  ".pdf"), 
-  #     height = 6, width =10, useDingbats = FALSE)
-  # 
-  # plot(br.out$rank, br.out$total, log="xy", xlab="Rank", ylab="Total")
-  # 
-  # o <- order(br.out$rank)
-  # lines(br.out$rank[o], br.out$fitted[o], col="red")
-  # abline(h=metadata(br.out)$knee, col="dodgerblue", lty=2)
-  # abline(h=metadata(br.out)$inflection, col="forestgreen", lty=2)
-  # abline(v = sum(iscell_dd), col = 'darkgreen', lwd = 2.0)
-  # abline(v = c(3000, 5000, 8000, 10000, 12000), col = 'gray')
-  # text(x = c(3000, 5000, 8000, 10000, 12000), y =10000, labels = c(3000, 5000, 8000, 10000, 12000), 
-  #      col = 'red')
-  # legend("bottomleft", lty=2, col=c("dodgerblue", "forestgreen"),
-  #        legend=c("knee", "inflection"))
-  # 
-  # dev.off()
+  br.out <- barcodeRanks(count.data)
+
+  pdf(paste0(resDir, "/UMIrank_emptyDrop_", design$condition[n], "_", design$sampleID[n],  ".pdf"),
+      height = 6, width =10, useDingbats = FALSE)
+
+  plot(br.out$rank, br.out$total, log="xy", xlab="Rank", ylab="Total")
+
+  o <- order(br.out$rank)
+  lines(br.out$rank[o], br.out$fitted[o], col="red")
+  abline(h=metadata(br.out)$knee, col="dodgerblue", lty=2)
+  abline(h=metadata(br.out)$inflection, col="forestgreen", lty=2)
+  abline(v = sum(iscell_dd), col = 'darkgreen', lwd = 2.0)
+  abline(v = c(8000, 10000, 12000), col = 'gray')
+  text(x = c(8000, 10000, 12000), y =10000, labels = c( 8000, 10000, 12000),
+       col = 'red')
+  legend("bottomleft", lty=2, col=c("dodgerblue", "forestgreen"),
+         legend=c("knee", "inflection"))
+
+  dev.off()
+  
   
   # use defaultDrop to select cells.
-  aa = CreateSeuratObject(counts = count.data,
-                          meta.data = meta, 
+  aa = CreateSeuratObject(counts = count.data[, iscell_dd],
+                          meta.data = meta[iscell_dd, ], 
                           min.cells = 20, min.features = 100)
   aa$cell.id = paste0(colnames(aa), '_', design$condition[n], '_', design$sampleID[n])
+  #aa$cell.id = paste0(colnames(aa), '_', design$condition[n], '_', design$sampleID[n])
   
   if(n == 1) {
     mnt = aa
   }else{
+    #mnt = merge(mnt, aa, add.cell.ids = c("", design$condition[n]), collapse = TRUE)
+    #mnt = merge(mnt, aa, add.cell.ids = c("", design$condition[n]))
     mnt = merge(mnt, aa)
   }
   
 }
 
+#levels = c('ctl_dpi0', 'ctl_dpi4',  'ctl_dpi7', 'ctl_dpi14')
+aa$condition = factor(aa$condition, levels =  levels)
+
 mnt[["percent.mt"]] <- PercentageFeatureSet(mnt, pattern = "^mt-")
 
+
 saveRDS(mnt, 
-     file = paste0(RdataDir, 'seuratObject_design_variableGenes_', species, version.analysis, '.rds'))
+     file = paste0(RdataDir, 
+                   'seuratObject_design_variableGenes_', species, version.analysis, '.rds'))
 
+rm(count.data); rm(br.out); rm(bc);rm(meta)
 
 ##########################################
-# QCs and cell filtering  
+# QCs and cell filtering
 ##########################################
-load(file = paste0(RdataDir, 'seuratObject_design_variableGenes_', species, version.analysis, '.Rdata'))
-aa = mnt
-rm(mnt)
+aa = readRDS(file = paste0(RdataDir, 
+                           'seuratObject_design_variableGenes_', species, version.analysis, '.rds'))
+
 
 pdfname = paste0(resDir, '/QCs_nCounts_nFeatures_percentMT.pdf')
 pdf(pdfname, width=16, height = 8)
@@ -159,37 +175,308 @@ VlnPlot(aa, features = 'percent.mt', y.max =20)
 FeatureScatter(aa, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
 FeatureScatter(aa, feature1 = "nCount_RNA", feature2 = "percent.mt")
 
-#ggs = sapply(rownames(aa), function(x) {x = unlist(strsplit(x, '-')); x = x[grep('ENSMUSG', x, invert = TRUE)];
-#                                                                               paste0(x, collapse = '-')})
-
-features = c('Pou5f1', 'Sox2', 'Lef1', 'Otx2', 'Zfp703', 'Pax6', 'Foxa2', 'Shh', 'Nkx6-1', 'Nkx2-2', 'Olig2', 
-             'Sox1', 'Tubb3')
-features = rownames(aa)[!is.na(match(rownames(aa), features))]
-
-Idents(aa) = factor(aa$condition, levels = levels)
-
-for(n in 1:length(features))
-{
-  p1 = VlnPlot(aa, features = features[n])
-  plot(p1)
-}
-
 dev.off()
 
-rm(count.data); rm(br.out); rm(bc);rm(meta)
 
 ##########################################
 ## filter cells here
 ##########################################
-VlnPlot(aa, features = 'nFeature_RNA', y.max = 10000) +
+VlnPlot(aa, features = 'nFeature_RNA', y.max = 10000, pt.size = 0.001) +
   geom_hline(yintercept = c(1000, 8000), col = 'red')
+
+VlnPlot(aa, features = 'nCount_RNA', y.max = 100000) +
+  geom_hline(yintercept = c(500, 8000), col = 'red')
 
 VlnPlot(aa, features = 'percent.mt', y.max =20) + 
   geom_hline(yintercept = c(5), col = 'red')
 
-aa <- subset(aa, subset = nFeature_RNA > 1000 & nFeature_RNA < 10000 & percent.mt < 5)
+aa <- subset(aa, subset = nFeature_RNA > 1000 & nFeature_RNA < 8000 & percent.mt < 5)
 
-saveRDS(aa, file = paste0(RdataDir, 'seuratObject_merged_cellFiltered_', species, version.analysis, '.rds'))
+
+##########################################
+# first umap and clustering  
+##########################################
+aa <- NormalizeData(aa, normalization.method = "LogNormalize", scale.factor = 10000)
+
+aa <- FindVariableFeatures(aa, selection.method = "vst", nfeatures = 5000)
+#all.genes <- rownames(aa)
+
+aa <- ScaleData(aa)
+
+aa <- RunPCA(aa, features = VariableFeatures(object = aa), verbose = FALSE)
+ElbowPlot(aa, ndims = 30)
+
+
+aa$condition = factor(aa$condition, levels = levels)
+Idents(aa) = aa$condition
+
+aa <- RunUMAP(aa, dims = 1:30, n.neighbors = 50, min.dist = 0.1)
+DimPlot(aa, label = TRUE, repel = TRUE, group.by = 'condition', raster=FALSE)
+
+saveRDS(aa, file = paste0(RdataDir, 'seuratObject_merged_cellFiltered_umap_', species, version.analysis, 
+                          '.rds'))
+
+
+##########################################
+# overview marker genes 
+##########################################
+aa = readRDS(file = paste0(RdataDir, 'seuratObject_merged_cellFiltered_umap_', species, version.analysis, 
+                           '.rds'))
+
+markers = c('Adgre1', 'Cd14', 'Cd68', 'Cx3cr1', 'Itgam-ENSMUSG00000030786',"Itgam-ENSMUSG00000108596", # pan macrophage
+            'Tlr2', 'Nos2', 'Cd80', 'Cd86', 'Ifng', # M1
+            'Arg1', 'Cd163', 'Il4', 'Irf4', 'Mrc1', # M2
+            'En1', 'Ddit4', 'Ldha', 'Eno1', 'Serpine1', 'Lgals1', 'Hif1a', # protomyfibro- and Myofibro
+            'Aldh1a3', 'Rdh10', 
+            'Sfrp2', 'Cthrc1', 'Fstl1', #SFRP+ fibroblasts
+            'Tnc', 'Stat3', 'Pcsk5', 'Cyp26b1', #Proto-Myofibroblasts
+            'Acta2', 'Postn', 'Lrrc15', 'Runx2', # Myofibroblasts 
+            'Pdpn', 'Ccl2', 'Cxcl1', 'Ccl11', 'Ccl7', 'Ccl8', #Pro-inflammatory
+            'Dpt', 'Pi16', #Universal fibroblast markers and fascia
+            'Ly6a', 'Procr', 'Plac8', #Fascia
+            'Mgp', 'Cygb', 'Cxcl12',  # Reticular
+            'Sparc', 'Dcn', 'Lum' #Papillary
+)
+
+mm = match(markers, rownames(aa))
+markers[which(is.na(mm))]
+
+pdfname = paste0(resDir, '/FeaturePlots_markerGenes.pdf')
+pdf(pdfname, width=8, height = 6)
+
+for(n in 1:length(markers))
+#for(n in 1:5)
+{
+  cat(n, '\n')
+  p = FeaturePlot(aa, features = markers[n])
+  plot(p)
+  
+}
+
+dev.off()
+
+
+########################################################
+########################################################
+# Section II: identifying doublet 
+# 
+########################################################
+########################################################
+library(DoubletFinder)
+
+aa = readRDS(file = paste0(RdataDir, 'seuratObject_merged_cellFiltered_umap_', species, version.analysis, 
+                           '.rds'))
+
+aa$condition = factor(aa$condition, levels = levels)
+Idents(aa) = aa$condition
+
+cc = unique(aa$condition)
+
+for(n in 1:length(cc))
+{
+  # n = 1
+  subs <- subset(aa, condition == cc[n])
+  
+  subs <- FindVariableFeatures(subs, selection.method = "vst", nfeatures = 3000)
+  subs <- ScaleData(subs)
+  
+  subs <- RunPCA(subs, verbose = TRUE)
+  subs <- FindNeighbors(subs, dims = 1:30)
+  subs <- FindClusters(subs, resolution = 1)
+  
+  subs <- RunUMAP(subs, dims = 1:30)
+  
+  sweep.res.list_nsclc <- paramSweep_v3(subs)
+  
+  sweep.stats_nsclc <- summarizeSweep(sweep.res.list_nsclc, GT = FALSE)
+  bcmvn_nsclc <- find.pK(sweep.stats_nsclc)
+  
+  pK <- bcmvn_nsclc %>% # select the pK that corresponds to max bcmvn to optimize doublet detection
+    filter(BCmetric == max(BCmetric)) %>%
+    select(pK) 
+  
+  pK <- as.numeric(as.character(pK[[1]]))
+  annotations <- subs@meta.data$seurat_clusters
+  homotypic.prop <- modelHomotypic(annotations) 
+  
+  
+  nExp_poi <- round(0.076*nrow(subs@meta.data))  
+  nExp_poi.adj <- round(nExp_poi*(1-homotypic.prop))
+  
+  subs <- doubletFinder_v3(subs, PCs = 1:30, pN = 0.25, pK = pK, nExp = nExp_poi.adj,  
+                           reuse.pANN = FALSE, sct = FALSE)
+  
+  df_out = subs@meta.data
+  subs$DF_out = df_out[, grep('DF.classification', colnames(df_out))]
+  
+  DimPlot(subs, label = TRUE, repel = TRUE, group.by = 'DF_out',
+          raster=FALSE)
+  ggsave(filename = paste0(resDir, '/subs_doubletFinder_out_', cc[n], '_', species, version.analysis, '.pdf'), 
+         width = 12, height = 8)
+  
+  saveRDS(subs, file = paste0(RdataDir, 'subs_doubletFinder_out_', cc[n], '_', species, version.analysis,  
+                              '.rds'))
+  
+}
+
+##########################################
+# save the doubletFinder in the main table  
+##########################################
+cc = unique(aa$condition)
+aa$DF_out = NA
+
+for(n in 1:length(cc))
+{
+  # n = 1
+  cat(n, '--', cc[n], '\n')
+  subs = readRDS(file =  paste0(RdataDir, 'subs_doubletFinder_out_', cc[n], '_', species, version.analysis,  
+                                '.rds'))
+  aa$DF_out[match(colnames(subs), colnames(aa))] = subs$DF_out
+  
+}
+
+
+DimPlot(aa, label = TRUE, repel = TRUE, group.by = 'DF_out', raster=FALSE)
+ggsave(filename = paste0(resDir, '/umap_doubletFinder_results.pdf'), width = 12, height = 8)
+
+VlnPlot(aa, features = 'nCount_RNA', group.by = 'DF_out', pt.size = 0.1) +
+  geom_hline(yintercept = c(25000, 12500), col = 'red')
+
+ggsave(filename = paste0(resDir, '/nCounts_RNA_double.vs.singlet_doubletFinder_results.pdf'), 
+       width = 12, height = 8)
+
+VlnPlot(aa, features = 'nFeature_RNA', group.by = 'DF_out', pt.size = 0.1) +
+  geom_hline(yintercept = c(2000, 5000), col = 'red')
+
+ggsave(filename = paste0(resDir, '/nFeatures_RNA_double.vs.singlet_doubletFinder_results.pdf'), 
+       width = 12, height = 8)
+
+
+as_tibble(data.frame(condition = aa$condition, group= aa$DF_out)) %>%
+  group_by(condition, group) %>% tally() 
+
+pcts = c()
+for(n in 1:length(cc))
+{
+  # n =1
+  pcts = c(pcts, length(which(aa$DF_out== 'Doublet' & 
+                                aa$condition == cc[n]))/length(which(aa$condition == cc[n])))
+  
+}
+
+data.frame(condition = cc, pct = pcts) %>%
+  ggplot(aes(x = condition, y = pct, fill = condition)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "none")  + 
+  ggtitle('pct of doublets by DF ') + 
+  theme(axis.text.x = element_text(angle = 90)) 
+
+ggsave(filename = paste0(resDir, '/Percentages_doublet.vs.total_doubletFinder_results.pdf'), 
+       width = 8, height = 6)
+
+saveRDS(aa, file = paste0(RdataDir, 'seuratObject_merged_cellFiltered_doubletFinderOut_', 
+                          species, version.analysis, '.rds'))
+
+
+##########################################
+# discard the doublet and redo umap and clustering 
+##########################################
+aa = subset(aa, cells = colnames(aa)[which(aa$DF_out == 'Singlet')])
+
+aa <- NormalizeData(aa, normalization.method = "LogNormalize", scale.factor = 10000)
+
+aa <- FindVariableFeatures(aa, selection.method = "vst", nfeatures = 5000)
+#all.genes <- rownames(aa)
+
+aa <- ScaleData(aa)
+
+aa <- RunPCA(aa, features = VariableFeatures(object = aa), verbose = FALSE)
+ElbowPlot(aa, ndims = 30)
+
+
+aa$condition = factor(aa$condition, levels = levels)
+Idents(aa) = aa$condition
+
+aa <- RunUMAP(aa, dims = 1:30, n.neighbors = 50, min.dist = 0.1)
+DimPlot(aa, label = TRUE, repel = TRUE, group.by = 'condition', raster=FALSE)
+
+
+## clustering 
+ElbowPlot(aa, ndims = 30)
+aa <- FindNeighbors(aa, dims = 1:20)
+aa <- FindClusters(aa, verbose = FALSE, algorithm = 3, resolution = 0.5)
+DimPlot(aa, label = TRUE, repel = TRUE, raster=FALSE)
+
+p1 = DimPlot(aa, label = TRUE, repel = TRUE, group.by = 'condition', raster=FALSE)
+p2 = DimPlot(aa, label = TRUE, repel = TRUE, raster=FALSE)
+
+p1 + p2
+
+ggsave(filename = paste0(resDir, '/first_UMAP_clusters.pdf'), 
+       width = 16, height = 6)
+
+
+markers = c('Adgre1', 'Cd14', 'Cd68', 'Cx3cr1', 'Itgam-ENSMUSG00000030786',"Itgam-ENSMUSG00000108596", # pan macrophage
+            'Tlr2', 'Nos2', 'Cd80', 'Cd86', 'Ifng', # M1
+            'Arg1', 'Cd163', 'Il4', 'Irf4', 'Mrc1', # M2
+            'En1', 'Ddit4', 'Ldha', 'Eno1', 'Serpine1', 'Lgals1', 'Hif1a', # protomyfibro- and Myofibro
+            'Aldh1a3', 'Rdh10', 
+            'Sfrp2', 'Cthrc1', 'Fstl1', #SFRP+ fibroblasts
+            'Tnc', 'Stat3', 'Pcsk5', 'Cyp26b1', #Proto-Myofibroblasts
+            'Acta2', 'Postn', 'Lrrc15', 'Runx2', # Myofibroblasts 
+            'Pdpn', 'Ccl2', 'Cxcl1', 'Ccl11', 'Ccl7', 'Ccl8', #Pro-inflammatory
+            'Dpt', 'Pi16', #Universal fibroblast markers and fascia
+            'Ly6a', 'Procr', 'Plac8', #Fascia
+            'Mgp', 'Cygb', 'Cxcl12',  # Reticular
+            'Sparc', 'Dcn', 'Lum' #Papillary
+)
+
+mm = match(markers, rownames(aa))
+markers[which(is.na(mm))]
+
+pdfname = paste0(resDir, '/FeaturePlots_markerGenes.pdf')
+pdf(pdfname, width=8, height = 6)
+
+for(n in 1:length(markers))
+  #for(n in 1:5)
+{
+  cat(n, '\n')
+  p = FeaturePlot(aa, features = markers[n])
+  plot(p)
+  
+}
+
+dev.off()
+
+
+saveRDS(aa, file = paste0(RdataDir, 'seuratObject_merged_cellFiltered_DFout_umapClustering_', 
+                          species, version.analysis, '.rds'))
+
+
+##########################################
+# calculate the cell cycle scoring  
+##########################################
+aa = readRDS(file = paste0(RdataDir, 'seuratObject_merged_cellFiltered_DFout_umapClustering_', 
+                           species, version.analysis, '.rds'))
+
+# Assign Cell-Cycle Scores
+s.genes <- firstup(cc.genes$s.genes)
+g2m.genes <- firstup(cc.genes$g2m.genes)
+
+aa <- CellCycleScoring(aa, s.features = s.genes, g2m.features = g2m.genes, set.ident = FALSE)
+
+# Running a PCA on cell cycle genes reveals, unsurprisingly, that cells separate entirely by
+# phase
+#aa <- RunPCA(aa, features = c(s.genes, g2m.genes))
+
+DimPlot(aa, label = TRUE, repel = TRUE, group.by = 'Phase', raster=FALSE)
+
+ggsave(filename = paste0(resDir, '/UMAP_cellcyclePhase.pdf'), 
+       width = 8, height = 6)
+
+
+
+FeaturePlot(aa, features = c('Procr', 'Dpt', 'Pi16'))
 
 
 
