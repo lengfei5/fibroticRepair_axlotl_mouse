@@ -475,8 +475,256 @@ ggsave(filename = paste0(resDir, '/UMAP_cellcyclePhase.pdf'),
        width = 8, height = 6)
 
 
+saveRDS(aa, file = paste0(RdataDir, 'seuratObject_merged_cellFiltered_DFout_cellCycle_umapClustering_', 
+                          species, version.analysis, '.rds'))
 
-FeaturePlot(aa, features = c('Procr', 'Dpt', 'Pi16'))
 
 
+########################################################
+########################################################
+# Section III: annotate subtypes of macrophage and fibroblast
+# 
+########################################################
+########################################################
+aa = readRDS(file = paste0(RdataDir, 'seuratObject_merged_cellFiltered_DFout_cellCycle_umapClustering_', 
+                           species, version.analysis, '.rds'))
+
+
+markers = c('Adgre1', 'Cd14', 'Cd68', 'Cx3cr1', 'Itgam-ENSMUSG00000030786',"Itgam-ENSMUSG00000108596", # pan macrophage
+            'Tlr2', 'Nos2', 'Cd80', 'Cd86', 'Ifng', # M1
+            'Arg1', 'Cd163', 'Il4', 'Irf4', 'Mrc1', # M2
+            
+            'En1', 'Ddit4', 'Ldha', 'Eno1', 'Serpine1', 'Lgals1', 'Hif1a', # protomyfibro- and Myofibro
+            'Aldh1a3', 'Rdh10', 
+            'Sfrp2', 'Cthrc1', 'Fstl1', #SFRP+ fibroblasts
+            'Tnc', 'Stat3', 'Pcsk5', 'Cyp26b1', #Proto-Myofibroblasts
+            'Acta2', 'Postn', 'Lrrc15', 'Runx2', # Myofibroblasts 
+            'Pdpn', 'Ccl2', 'Cxcl1', 'Ccl11', 'Ccl7', 'Ccl8', #Pro-inflammatory
+            'Dpt', 'Pi16', #Universal fibroblast markers and fascia
+            'Ly6a', 'Procr', 'Plac8', #Fascia
+            'Mgp', 'Cygb', 'Cxcl12',  # Reticular
+            'Sparc', 'Dcn', 'Lum' #Papillary
+)
+
+mm = match(markers, rownames(aa))
+markers[which(is.na(mm))]
+
+aa <- FindClusters(aa, verbose = FALSE, algorithm = 3, resolution = 0.3)
+DimPlot(aa, label = TRUE, repel = TRUE, raster=FALSE)
+
+ggsave(filename = paste0(resDir, '/coarseClusters_RNA_snn_res_16Clusters.pdf'), 
+       width = 8, height = 6)
+
+markers = FindAllMarkers(aa, only.pos = TRUE, min.pct = 0.2, logfc.threshold = 0.5)
+
+saveRDS(markers, file = paste0(RdataDir, 'seuratObject_', species, version.analysis, 
+                               '_markers_RNA_snn_res_16Clusters.rds'))
+
+markers %>%
+  group_by(cluster) %>%
+  dplyr::filter(avg_log2FC > 1) %>%
+  slice_head(n = 10) %>%
+  ungroup() -> top10
+  #slice_max(n = 10, order_by = avg_log2FC) -> top10
+
+#saveRDS(top10, file = paste0(RdataDir, 'top10_markerGenes_coarseCluster.rds'))
+
+all.genes <- rownames(aa)
+aa <- ScaleData(aa, features = all.genes)
+
+xx = subset(aa, downsample = 1000)
+
+DoHeatmap(xx, features = top10$gene) + NoLegend()
+
+ggsave(filename = paste0(resDir, '/first_test_RNA_snn_res_16Clusters_clusterMarkers.pdf'), 
+       width = 20, height = 20)
+
+
+
+
+##########################################
+# using known marker genes to annotate clusters
+##########################################
+aa$celltypes = NA
+
+FeaturePlot(aa, features = c('Procr', 'Dpt', 'Pi16', 'Col1a2', 'Acta2', 'Lum', 'Col3a1', 'Col1a1', 'Mmp2', 
+                             'Pdgfra'))
+
+ggsave(filename = paste0(resDir, '/FeaturePlots_MarkerGenes_Fibroblast.pdf'), 
+       width = 12, height = 8)
+
+
+aa$celltypes[which(!is.na(match(aa$seurat_clusters, c(10, 7, 5, 0, 1, 3, 4))))] = 'fibroblast'
+
+
+FeaturePlot(aa, features = c('Adgre1', 'Cd68', 'Itgam-ENSMUSG00000030786', 
+                             'Cd14',  'Cx3cr1', # pan macrophage
+                             'Tlr2', 'Nos2', 'Cd80', 'Cd86', 'Ifng', # M1 (pro-inflamatory)
+                             'Arg1', 'Cd163', 'Il4', 'Irf4', 'Mrc1' # M2 (anti-)
+))
+
+ggsave(filename = paste0(resDir, '/FeaturePlots_MarkerGenes_Macrophage.pdf'), 
+       width = 16, height = 10)
+
+FeaturePlot(aa, features = c('Adgre1', 'Cd68', 'Itgam-ENSMUSG00000030786'
+))
+
+aa$celltypes[which(aa$seurat_clusters == 2| aa$seurat_clusters == 15| 
+                  aa$seurat_clusters == 6)] = 'macrophage'
+
+
+FeaturePlot(aa, features = c('Ly6g')) # neutrophil, likely is cluster 8 
+
+aa$celltypes[which(!is.na(match(aa$seurat_clusters, c(8))))] = 'neutrophil'
+
+
+FeaturePlot(aa, features = c('Cd3g', 'Cd3d', 'Cd3e')) # T cells, correspond to cluster 12 and cluster 9
+
+aa$celltypes[which(!is.na(match(aa$seurat_clusters, c(9, 12))))] = 'T'
+
+FeaturePlot(aa, features = c('Itgax')) # Dendritic cells, no clear cluster found
+
+FeaturePlot(aa, features = c('Ncam1', 'Cd3g', 'Cd3d', 'Cd3e')) # NK cells
+
+aa$celltypes[which(!is.na(match(aa$seurat_clusters, c(13))))] = 'NK'
+
+FeaturePlot(aa, features = c('Pecam1', 'Vwf')) # Endothelial cells
+aa$celltypes[which(!is.na(match(aa$seurat_clusters, c(11))))] = 'Endothelial'
+
+FeaturePlot(aa, features = c('Pax7', 'Myod1', 'Ckm')) # 
+
+aa$celltypes[which(!is.na(match(aa$seurat_clusters, c(14))))] = 'skeletalMuscle_others'
+
+
+DimPlot(aa, group.by = 'celltypes', label = TRUE, repel = TRUE, raster=FALSE)
+
+ggsave(filename = paste0(resDir, '/CoarseCluster_annotation_v1.pdf'), 
+       width = 8, height = 6)
+
+saveRDS(aa, file = paste0(RdataDir, 'seuratObject_merged_cellFiltered_DFout_cellCycle_umapClustering_',
+                          'celltypeAnnot.v1_',  species, version.analysis, '.rds'))
+
+
+##########################################
+# subset macrophages
+##########################################
+aa = readRDS(file = paste0(RdataDir, 'seuratObject_merged_cellFiltered_DFout_cellCycle_umapClustering_',
+                     'celltypeAnnot.v1_',  species, version.analysis, '.rds'))
+
+
+FeaturePlot(aa, features = c('Adgre1', 'Cd68', 'Itgam-ENSMUSG00000030786', 'Csf1r', 'H2-Ab1', 'Mertk',
+                             'Cd14',  'Cx3cr1', # pan macrophage
+                             'Tlr2', 'Nos2', 'Cd80', 'Cd86', 'Ifng', # M1 (pro-inflamatory)
+                             'Arg1', 'Cd163', 'Il4', 'Irf4', 'Mrc1' # M2 (anti-)
+))
+
+ggsave(filename = paste0(resDir, '/CoarseCluster_annotation_macrophages_markGenes.pdf'), 
+       width = 12, height = 10)
+
+aa$clusters = aa$seurat_clusters
+
+VlnPlot(aa, group.by = 'clusters', 
+        features = c('Adgre1', 'Cd68', 'Itgam-ENSMUSG00000030786', 'Csf1r', 'H2-Ab1', 'Mertk',
+                                    'Cd14',  'Cx3cr1', # pan macrophage
+                                    'Tlr2', 'Nos2', 'Cd80', 'Cd86', 'Ifng', # M1 (pro-inflamatory)
+                                    'Arg1', 'Cd163', 'Il4', 'Irf4', 'Mrc1' # M2 (anti-)),
+                         
+))
+
+
+subs = subset(aa, cells = colnames(aa)[which(aa$celltypes == "macrophage")])
+
+subs = NormalizeData(subs, normalization.method = "LogNormalize", scale.factor = 10000)
+subs <- FindVariableFeatures(subs, selection.method = "vst", nfeatures = 3000) # find subset-specific HVGs
+
+subs <- ScaleData(subs, features = rownames(subs))
+subs <- RunPCA(subs, features = VariableFeatures(object = subs), verbose = FALSE, weight.by.var = FALSE)
+
+ElbowPlot(subs, ndims = 50)
+
+subs <- FindNeighbors(subs, dims = 1:30)
+subs <- FindClusters(subs, verbose = FALSE, algorithm = 3, resolution = 0.5)
+
+subs <- RunUMAP(subs, reduction = "pca", dims = 1:30, n.neighbors = 30,  min.dist = 0.3)
+
+p1 = DimPlot(subs, group.by = 'condition', label = TRUE, repel = TRUE)
+p2 = DimPlot(subs, group.by = 'seurat_clusters', label = TRUE, repel = TRUE)
+
+p1 + p2
+
+ggsave(filename = paste0(resDir, '/Macrophages_subtypes_clustering.pdf'), 
+       width = 12, height = 10)
+
+
+VlnPlot(subs, group.by = 'seurat_clusters', 
+        features = c('Adgre1', 'Cd68', 'Itgam-ENSMUSG00000030786', 'Csf1r', 'H2-Ab1', 'Mertk',
+                     'Cd14',  'Cx3cr1' # pan macrophage
+                     
+        ))
+
+## remove two small clusters
+subs = subset(subs, cells= colnames(subs)[which(subs$seurat_clusters != 10 & subs$seurat_clusters != 11)])
+
+subs = NormalizeData(subs, normalization.method = "LogNormalize", scale.factor = 10000)
+subs <- FindVariableFeatures(subs, selection.method = "vst", nfeatures = 3000) # find subset-specific HVGs
+
+subs <- ScaleData(subs, features = rownames(subs))
+subs <- RunPCA(subs, features = VariableFeatures(object = subs), verbose = FALSE, weight.by.var = FALSE)
+
+ElbowPlot(subs, ndims = 50)
+
+subs <- FindNeighbors(subs, dims = 1:20)
+subs <- FindClusters(subs, verbose = FALSE, algorithm = 3, resolution = 0.5)
+
+subs <- RunUMAP(subs, reduction = "pca", dims = 1:30, n.neighbors = 50,  min.dist = 0.3)
+
+p1 = DimPlot(subs, group.by = 'condition', label = TRUE, repel = TRUE)
+p2 = DimPlot(subs, group.by = 'seurat_clusters', label = TRUE, repel = TRUE)
+
+p1 + p2
+
+ggsave(filename = paste0(resDir, '/Macrophages_subtypes_clustering.pdf'), 
+       width = 12, height = 6)
+
+DimPlot(subs, group.by = 'Phase')
+
+DimPlot(subs, group.by = 'subtypes')
+
+subs$subtypes = NA
+subs$subtypes[which(subs$seurat_clusters == 10)] = 'cycling'
+
+markers = FindAllMarkers(subs, only.pos = TRUE, min.pct = 0.2, logfc.threshold = 0.5)
+
+markers %>%
+  group_by(cluster) %>%
+  dplyr::filter(avg_log2FC > 1) %>%
+  slice_head(n = 10) %>%
+  ungroup() -> top10
+#slice_max(n = 10, order_by = avg_log2FC) -> top10
+
+#saveRDS(top10, file = paste0(RdataDir, 'top10_markerGenes_coarseCluster.rds'))
+
+all.genes <- rownames(subs)
+subs <- ScaleData(subs, features = all.genes)
+
+DoHeatmap(subs, features = top10$gene) + NoLegend()
+
+ggsave(filename = paste0(resDir, '/macrophages_subclusters_clusterMarkers.pdf'), 
+       width = 16, height = 20)
+
+# VlnPlot(subs, group.by = 'seurat_clusters', 
+#         features = c('Adgre1', 'Cd68', 'Itgam-ENSMUSG00000030786', 'Csf1r', 'H2-Ab1', 'Mertk',
+#                      'Cd14',  'Cx3cr1' # pan macrophage
+#                      
+#         ))
+# 
+# subs = subset(subs, cells = colnames(subs)[which(subs$seurat_clusters != 10)])
+
+subs$clusters = subs$seurat_clusters
+kk = which(subs$clusters != 9)
+subs$subtypes[kk] = paste0('C', subs$clusters[kk], '.mm')
+
+DimPlot(subs, group.by = 'subtypes', label = TRUE, repel = TRUE)
+
+saveRDS(subs, file = paste0(RdataDir, '/mouse_skin_macrophage_subtypes.rds'))
 

@@ -220,6 +220,7 @@ p2 = DimPlot(aa, group.by = 'celltype', label = TRUE, repel = TRUE)
 
 p1 + p2
 
+
 ##########################################
 # subset macrophage and subclustering
 ##########################################
@@ -317,13 +318,79 @@ ggsave(filename = paste0(resDir,
        width = 8, height = 16)
 
 
+########################################################
+########################################################
+# Section III: 
+# subclustering macrophage and fibroblast for Elly and Sabine's grant application
+########################################################
+########################################################
+aa = readRDS(file = paste0(RdataDir, 
+                           '/axoltol_limbBlatema_batch1_fromTobi_filterCelltypes_geneNames.rds'))
+
+ggs = rownames(aa)
+ggs = get_geneName(ggs)
+
+p1 = DimPlot(aa, group.by = 'time', label = TRUE, repel = TRUE)
+p2 = DimPlot(aa, group.by = 'celltype', label = TRUE, repel = TRUE)
+
+p1 + p2
+
+aa$celltype[which(aa$celltype == 'Connective Tissue')] = 'Fibroblasts'
+aa <- subset(aa, subset = celltype == 'Fibroblasts'| celltype == 'Macrophages')
+
+aa = NormalizeData(aa, normalization.method = "LogNormalize", scale.factor = 10000)
+aa <- FindVariableFeatures(aa, selection.method = "vst", nfeatures = 5000) # find subset-specific HVGs
+
+aa <- ScaleData(aa)
+aa <- RunPCA(aa, features = VariableFeatures(object = aa), verbose = FALSE, weight.by.var = TRUE)
+
+ElbowPlot(aa, ndims = 50)
+
+aa <- RunUMAP(aa, reduction = "pca", dims = 1:20, n.neighbors = 30,  min.dist = 0.3)
+
+p1 = DimPlot(aa, group.by = 'time', label = TRUE, repel = TRUE)
+p2 = DimPlot(aa, group.by = 'celltype', label = TRUE, repel = TRUE)
+
+p1 + p2
+
+
 ##########################################
 # quickly check the macrophage subtype markers 
 ##########################################
+subs = subset(aa, cells = colnames(aa)[which(aa$celltype == "Macrophages")])
+
+subs = NormalizeData(subs, normalization.method = "LogNormalize", scale.factor = 10000)
+subs <- FindVariableFeatures(subs, selection.method = "vst", nfeatures = 5000) # find subset-specific HVGs
+
+subs <- ScaleData(subs, features = rownames(subs))
+subs <- RunPCA(subs, features = VariableFeatures(object = subs), verbose = FALSE, weight.by.var = TRUE)
+
+ElbowPlot(subs, ndims = 50)
+
+subs <- FindNeighbors(subs, dims = 1:20)
+subs <- FindClusters(subs, verbose = FALSE, algorithm = 3, resolution = 0.5)
+
+subs <- RunUMAP(subs, reduction = "pca", dims = 1:30, n.neighbors = 30,  min.dist = 0.3)
+
+p1 = DimPlot(subs, group.by = 'time', label = TRUE, repel = TRUE)
+p2 = DimPlot(subs, group.by = 'seurat_clusters', label = TRUE, repel = TRUE)
+
+p1 + p2
+
+ggsave(filename = paste0(resDir, '/Tobie_batch1Data_axloltolBlastema_macrophage_subclusters.pdf'), 
+       width = 14, height = 6)
+
+
+subs$clusters = subs$RNA_snn_res.0.5
+DimPlot(subs, group.by = 'Phase')
+
+subs$subtypes = NA
+subs$subtypes[which(subs$clusters == 7)] = 'cycling'
+
 # https://www.biocompare.com/Editorial-Articles/566347-A-Guide-to-Macrophage-Markers/
-markers = c('ADGRE1', 'CD14', 'CD68', 'CX3CR1', 'ITGAM', # pan macrophage
+markers = c('ADGRE1', 'CD14', 'CD68', 'CX3CR1', 'ITGAM', 'CSF1R', ' H2AB1', 'MERTK',# pan macrophage
             'TLR2', 'NOS2', 'CD80', 'CD86', 'IFNG', # M1
-             'ARG1', 'CD163', 'IL4', 'IRF4', 'MRC1' # M2
+             'ARG1', 'CD163', 'IL4', 'IRF4' # M2
             )
 
 mm = match(markers, ggs)
@@ -334,5 +401,31 @@ FeaturePlot(subs, features = rownames(aa)[mm])
   #scale_color_distiller(palette = "RdYlBu")
   #scale_color_viridis_c()
 ggsave(filename = paste0(resDir, '/Tobie_umap.harmony_axloltol_limbBlatema_someGeneMarkers.pdf'), 
-       width = 8, height = 12)
+       width = 12, height = 8)
+
+
+Idents(subs) = factor(subs$clusters)
+oupMarker <- FindAllMarkers(subs)
+
+oupMarker = oupMarker[grep('^AME', oupMarker$gene, invert = TRUE), ]
+
+oupMarker %>%
+  group_by(cluster) %>%
+  dplyr::filter(avg_log2FC > 1.0) %>%
+  slice_head(n = 15) %>%
+  ungroup() -> top10
+DoHeatmap(subs, features = top10$gene) + NoLegend()
+
+ggsave(filename = paste0(resDir, 
+                         '/Tobie_batch1Data_umap_axloltol_BL_celltypes_macrophage_subclustering_',
+                         'top15_annotatedMouseMarkers.pdf'), 
+       width = 12, height = 20)
+
+kk = which(subs$clusters != 7)
+subs$subtypes[kk] = paste0('C', subs$clusters[kk], '.ax')
+
+DimPlot(subs, group.by = 'subtypes', label = TRUE, repel = TRUE)
+
+saveRDS(subs, file = paste0(RdataDir, 
+                          '/axoltol_limbBlatema_batch1_macrophage_subtypes.rds'))
 
