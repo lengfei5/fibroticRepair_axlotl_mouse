@@ -515,5 +515,128 @@ p_all
 ggsave(paste0(resDir, "axolotl_nm_mapping_test_v10.pdf"), width=18, height=10, dpi=300)
 
 
+########################################################
+########################################################
+# Section IV: Cross-species cell type correlations 
+# the same idea from https://www.science.org/doi/10.1126/science.abp9262
+# Tomas and Ashley's paper
+########################################################
+########################################################
+ax = readRDS(file = paste0(RdataDir, 'axoltol_limbBlatema_batch1_macrophage_subtypes.rds'))
+mm = readRDS(file = paste0(RdataDir, 'mouse_skin_macrophage_subtypes.rds'))
+
+ax$species = 'ax'
+ax$time = droplevels(ax$time)
+ax$subtypes[which(ax$subtypes == 'cycling')] = 'cycling.ax'
+
+mm$species = 'mm'
+mm$subtypes[which(mm$subtypes == 'cycling')] = 'cycling.mm'
+
+##########################################
+# find all DE genes for axolotl and mouse
+##########################################
+Idents(ax) = ax$subtypes
+Idents(mm) = mm$subtypes
+markers.ax = FindAllMarkers(ax, logfc.threshold = 0.5, min.pct = 0.1)
+markers.mm = FindAllMarkers(mm, logfc.threshold = 0.5, min.pct = 0.1)
+
+## define the one-on-one ortholog between axololt and mice
+an_orthologs = data.frame(ref = rownames(ax), query = rownames(ax))
+rownames(an_orthologs) = an_orthologs$ref
+an_orthologs$query = sapply(an_orthologs$query, 
+                            function(x){firstup(unlist(strsplit(as.character(x), '-'))[1])})
+
+## intersect gene names with mouse data
+jj = which(!is.na(match(an_orthologs$query, rownames(mm))))
+an_orthologs = an_orthologs[jj, ]
+
+## select unique genes 
+#counts = table(an_orthologs$query)
+gg_uniq = unique(an_orthologs$query)
+jj2 = match(gg_uniq, an_orthologs$query)
+
+an_orthologs = an_orthologs[jj2, ]
+
+rownames(an_orthologs) = an_orthologs$query
+
+## intersect with DE genes of axolotl and mouse
+mm1 = match(an_orthologs$ref, markers.ax$gene)
+mm2 = match(an_orthologs$query, markers.mm$gene)
+kk = intersect(which(!is.na(mm1)), which(!is.na(mm2)))
+
+an_orthologs = an_orthologs[kk, ]
+
+an_orthologs$tfs = FALSE
+an_orthologs$tfs[which(!is.na(match(toupper(an_orthologs$query), c(tfs))))] = TRUE
+
+avg.ax = AggregateExpression(ax, features = an_orthologs$ref[which(an_orthologs$tfs == TRUE)], 
+                             normalization.method = "LogNormalize",
+                             scale.factor = 10000)
+avg.ax = data.frame(avg.ax$RNA)
+
+avg.mm = AggregateExpression(mm, features = an_orthologs$query[which(an_orthologs$tfs == TRUE)])
+avg.mm = data.frame(avg.mm$RNA)
+
+
+cort = psych::corr.test(avg.ax, avg.mm, method = "spearman", 
+                        adjust = "fdr", alpha = 0.05, ci = F)
+
+range(cort$r)
+
+cort$maxrow = apply(cort$r, 1, which.max)
+cort$maxcol = apply(cort$r, 2, which.max)
+
+# cluster and order labels
+hcr = hclust(dist(cort$r), method = "ward.D2")
+hcc = hclust(dist(t(cort$r)), method = "ward.D2")
+hcr = hcr$labels[hcr$order]
+hcc = hcc$labels[hcc$order]
+
+# reshaping the correlations
+plot_df = reshape2::melt(cort$r)
+plot_df$Var1 = factor(plot_df$Var1, levels = rev(hcr))
+plot_df$Var2 = factor(plot_df$Var2, levels = hcc)
+
+# add pvalue and max cor infor
+plot_df$padj = -log10(reshape2::melt(cort$p.adj+min(cort$p.adj[cort$p.adj>0])/10)$value)
+plot_df$rowmax = apply(Reduce(cbind, lapply(names(cort$maxrow), 
+                                            function(n) plot_df$Var1==n &
+                                              plot_df$Var2==colnames(cort$r)[cort$maxrow[n]])), 
+                       1, any)
+plot_df$colmax = apply(Reduce(cbind, lapply(names(cort$maxcol), 
+                                            function(n) plot_df$Var2==n &
+                                              plot_df$Var1==rownames(cort$r)[cort$maxcol[n]])), 
+                       1, any)
+plot_df$markcol = plot_df$value>quantile(plot_df$value, 0.98)
+
+
+# getting a colourscale where 0 is white in the middle, and intensity leveled by max(abs(value))
+cols = colorRampPalette(c(rev(RColorBrewer::brewer.pal(9, "Blues")),
+                          RColorBrewer::brewer.pal(9, "Reds")))(101)
+#cols = colorRampPalette(c(RColorBrewer::brewer.pal(9, "Reds")))(101)
+br = seq((min(cort$r)), max(abs(cort$r)), length.out = 101)
+cols = cols[!(br>max(cort$r) | br<min(cort$r))]
+
+ggplot()+
+  geom_point(data = plot_df, mapping = aes(x = Var2, y = Var1, fill = value), 
+             shape = 21, size = 10) +
+  geom_point(data = plot_df[plot_df$rowmax,], mapping = aes(x = Var2, y = Var1, size = 30), 
+             shape = "—", show.legend = F, colour = "grey10")+
+  geom_point(data = plot_df[plot_df$colmax,], mapping = aes(x = Var2, y = Var1, size = 30), 
+             shape = "|", show.legend = F, colour = "grey10")+
+  scale_x_discrete(expand = c(0,0.7)) +
+  scale_y_discrete(expand = c(0,0.7)) +
+  scale_fill_gradientn(breaks = signif(c(min(cort$r)+0.005, 0, max(cort$r)-0.005),2), 
+                       #values = scales::rescale(c(min(br), 0, max(br))),
+                       colours = cols) +
+  labs(x = 'mouse', y = 'axolotl', fill = "Spearman's\nrho", size = "-log10\nadj. p-value")+
+  theme_classic()+
+  theme(axis.title = element_text(colour = "black", face = "bold"),
+        axis.text = element_text(colour = "black"),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1),
+        legend.title = element_text(size = 9),
+        legend.text = element_text(size = 8))
+
+ggsave(paste0(resDir, "axolotl_nm_subtype_correlationAnalysis.pdf"), width=8, height=6, dpi=300)
 
 
