@@ -65,7 +65,7 @@ sps = toupper(sps)
 
 ########################################################
 ########################################################
-# Section II: test Seurat-based integration methods
+# Section I: test Seurat-based integration methods
 # 
 ########################################################
 ########################################################
@@ -93,11 +93,17 @@ an_orthologs$query = sapply(an_orthologs$query,
 jj = which(!is.na(match(an_orthologs$query, rownames(mm))))
 an_orthologs = an_orthologs[jj, ]
 
-counts = table(an_orthologs$query)
-gg_uniq = names(counts)[which(counts == 1)]
-jj2 = which(!is.na(match(an_orthologs$query, gg_uniq)))
+## select unique genes 
+#counts = table(an_orthologs$query)
+#counts = table(an_orthologs$query)
+#gg_uniq = names(counts)[which(counts == 1)]
+#jj2 = which(!is.na(match(an_orthologs$query, gg_uniq)))
+
+gg_uniq = unique(an_orthologs$query)
+jj2 = match(gg_uniq, an_orthologs$query)
 
 an_orthologs = an_orthologs[jj2, ]
+#an_orthologs = an_orthologs[jj2, ]
 
 ax = subset(ax, features = an_orthologs$ref)
 aa = subset(mm, features = an_orthologs$query)
@@ -121,13 +127,104 @@ rm(list = c('counts', 'metadata', 'ax'))
 
 rm(new_ax)
 
-saveRDS(aa, file = paste0(RdataDir, 'mm_ax_scRNAseq_merged_forSeurat_v1.rds'))
+saveRDS(aa, file = paste0(RdataDir, 'mm_ax_scRNAseq_merged_forSeurat_v2.rds'))
+
+##########################################
+# test Seurat 
+##########################################
+source(paste0(functionDir, 'functions_dataIntegration.R'))
+aa = readRDS(file = paste0(RdataDir, 'mm_ax_scRNAseq_merged_forSeurat_v1.rds'))
+
+aa = ScaleData(aa, features = rownames(aa))
+#method = 'Harmony'
+
+if(method == 'Seurat_RPCA'){
+  ref.combined = IntegrateData_Seurat_RPCA(aa, 
+                                           group.by = 'species', 
+                                           nfeatures = 5000,
+                                           #merge.order = matrix(c(-2, 1, -3, -1), ncol = 2),
+                                           redo.normalization.scaling = FALSE,
+                                           correct.all = FALSE)
+  
+  p1 = DimPlot(ref.combined, group.by = 'subtypes', label = TRUE, repel = TRUE, raster=FALSE) + 
+    ggtitle('Seurat_RPCA')
+  p2 = DimPlot(ref.combined, group.by = 'species', label = TRUE, repel = TRUE) +
+    ggtitle("Seurat_RPCA")
+  
+  p1 + p2
+  
+  ggsave(filename = paste0(outDir, '/cross_species_mapping_Seurat_RPCA.pdf'), 
+         width = 16, height = 12)
+  
+  
+  
+}
+
+if(method == 'Seurat_CCA'){
+  source(paste0(functionDir, 'functions_dataIntegration.R'))
+  ref.combined = IntegrateData_Seurat_CCA(aa, 
+                                          group.by = 'species', 
+                                          nfeatures = 5000,
+                                          #reference = 'mm',
+                                          ndims = c(1:50),
+                                          k.anchor = 10,
+                                          k.weight = 100,
+                                          #merge.order = matrix(c(-2, 1, -3, -1), ncol = 2),
+                                          redo.normalization.scaling = TRUE,
+                                          correct.all = FALSE)
+  
+  p1 = DimPlot(ref.combined, group.by = 'subtypes', label = TRUE, repel = TRUE, raster=FALSE) + 
+    ggtitle('Seurat_CCA')
+  p2 = DimPlot(ref.combined, group.by = 'species', label = TRUE, repel = TRUE) +
+    ggtitle("Seurat_CCA")
+  
+  p1 + p2
+  
+  ggsave(filename = paste0(resDir, '/cross_species_mapping_Seurat_CCA.pdf'), 
+         width = 16, height = 6)
+  
+  saveRDS(ref.combined, file = paste0(resDir, 'crossSpecies_mm_ax_scRNAseq_SeuratCCA.rds'))
+  
+  
+  xx <- IntegrateLayers(object = xx, method = CCAIntegration, orig.reduction = "pca", 
+                        new.reduction = "integrated.cca",
+                          verbose = FALSE)
+  
+  
+}
+
+
+if(method == 'Harmony'){
+  source(paste0(functionDir, 'functions_dataIntegration.R'))
+  ref.combined = IntegrateData_runHarmony(aa, 
+                                          group.by = 'species',
+                                          nfeatures = 5000,
+                                          dims.use = c(1:50),
+                                          redo.normalization.hvg.scale.pca = TRUE,
+                                          max.iter.harmony = 30,
+                                          epsilon.harmony = -Inf
+                                          #correct.all = FALSE
+  )
+  
+  p1 = DimPlot(ref.combined, group.by = 'subtypes', label = TRUE, repel = TRUE, raster=FALSE) + 
+    ggtitle(method)
+  p2 = DimPlot(ref.combined, group.by = 'species', label = TRUE, repel = TRUE) +
+    ggtitle(method)
+  
+  p1 + p2
+  
+  ggsave(filename = paste0(resDir, '/cross_species_mapping_Harmony.pdf'), 
+         width = 16, height = 6)
+  
+  saveRDS(ref.combined, file = paste0(resDir, 'mm_ax_scRNAseq_crossSpecies_Harmony.rds'))
+  
+  
+}
+
 
 ##########################################
 # save files for scVI and scANVI 
 ##########################################
-
-
 ###### WORKAROUND ###### from https://github.com/mojaveazure/seurat-disk/issues/147
 # # assigning the previous version of the `[[` function for the Assay class to the SeuratDisk package environment
 # "[[.Assay" <- function(x, i, ..., drop = FALSE) {
@@ -181,88 +278,6 @@ SaveH5Seurat(aa, filename = saveFile, overwrite = TRUE)
 Convert(saveFile, dest = "h5ad", overwrite = TRUE)
 
 
-##########################################
-# test Seurat 
-##########################################
-source(paste0(functionDir, 'functions_dataIntegration.R'))
-aa = readRDS(file = paste0(RdataDir, 'nm_mm_ax_scRNAseq_merged_forSeurat_v1.rds'))
-
-
-aa = ScaleData(aa, features = rownames(aa))
-
-method = 'Harmony'
-
-if(method == 'Seurat_RPCA'){
-  ref.combined = IntegrateData_Seurat_RPCA(aa, 
-                                           group.by = 'species', 
-                                           nfeatures = 5000,
-                                           #merge.order = matrix(c(-2, 1, -3, -1), ncol = 2),
-                                           redo.normalization.scaling = FALSE,
-                                           correct.all = FALSE)
-  
-  p1 = DimPlot(ref.combined, group.by = 'subtypes', label = TRUE, repel = TRUE, raster=FALSE) + 
-    ggtitle('Seurat_RPCA')
-  p2 = DimPlot(ref.combined, group.by = 'species', label = TRUE, repel = TRUE) +
-    ggtitle("Seurat_RPCA")
-  
-  p1 + p2
-  
-  ggsave(filename = paste0(outDir, '/cross_species_mapping_Seurat_RPCA.pdf'), 
-         width = 16, height = 12)
-  
-  
-  
-}
-
-if(method == 'Seurat_CCA'){
-  ref.combined = IntegrateData_Seurat_CCA(aa, 
-                                          group.by = 'species', 
-                                          nfeatures = 5000,
-                                          #merge.order = matrix(c(-2, 1, -3, -1), ncol = 2),
-                                          redo.normalization.scaling = FALSE,
-                                          correct.all = FALSE)
-  
-  p1 = DimPlot(ref.combined, group.by = 'subtypes', label = TRUE, repel = TRUE, raster=FALSE) + 
-    ggtitle('Seurat_CCA')
-  p2 = DimPlot(ref.combined, group.by = 'species', label = TRUE, repel = TRUE) +
-    ggtitle("Seurat_CCA")
-  
-  p1 + p2
-  
-  ggsave(filename = paste0(resDir, '/cross_species_mapping_Seurat_CCA.pdf'), 
-         width = 16, height = 6)
-  
-  saveRDS(ref.combined, file = paste0(resDir, 'crossSpecies_mm_ax_scRNAseq_SeuratCCA.rds'))
-  
-}
-
-
-if(method == 'Harmony'){
-  source(paste0(functionDir, 'functions_dataIntegration.R'))
-  ref.combined = IntegrateData_runHarmony(aa, 
-                                          group.by = 'species',
-                                          nfeatures = 5000,
-                                          dims.use = c(1:50),
-                                          redo.normalization.hvg.scale.pca = TRUE,
-                                          max.iter.harmony = 30,
-                                          epsilon.harmony = -Inf
-                                          #correct.all = FALSE
-  )
-  
-  p1 = DimPlot(ref.combined, group.by = 'subtypes', label = TRUE, repel = TRUE, raster=FALSE) + 
-    ggtitle(method)
-  p2 = DimPlot(ref.combined, group.by = 'species', label = TRUE, repel = TRUE) +
-    ggtitle(method)
-  
-  p1 + p2
-  
-  ggsave(filename = paste0(resDir, '/cross_species_mapping_Harmony.pdf'), 
-         width = 16, height = 6)
-  
-  saveRDS(ref.combined, file = paste0(resDir, 'mm_ax_scRNAseq_crossSpecies_Harmony.rds'))
-  
-  
-}
 
 ########################################################
 ########################################################
@@ -551,13 +566,17 @@ jj = which(!is.na(match(an_orthologs$query, rownames(mm))))
 an_orthologs = an_orthologs[jj, ]
 
 ## select unique genes 
-#counts = table(an_orthologs$query)
 gg_uniq = unique(an_orthologs$query)
 jj2 = match(gg_uniq, an_orthologs$query)
+
+#counts = table(an_orthologs$query)
+#gg_uniq = names(counts)[which(counts == 1)]
+#jj2 = which(!is.na(match(an_orthologs$query, gg_uniq)))
 
 an_orthologs = an_orthologs[jj2, ]
 
 rownames(an_orthologs) = an_orthologs$query
+cat(nrow(an_orthologs), 'genes used for orthologs\n')
 
 ## intersect with DE genes of axolotl and mouse
 mm1 = match(an_orthologs$ref, markers.ax$gene)
@@ -618,12 +637,12 @@ br = seq((min(cort$r)), max(abs(cort$r)), length.out = 101)
 cols = cols[!(br>max(cort$r) | br<min(cort$r))]
 
 ggplot()+
-  geom_point(data = plot_df, mapping = aes(x = Var2, y = Var1, fill = value), 
+  geom_point(data = plot_df, mapping = aes(x = Var2, y = Var1, fill = expression), 
              shape = 21, size = 10) +
-  geom_point(data = plot_df[plot_df$rowmax,], mapping = aes(x = Var2, y = Var1, size = 30), 
-             shape = "—", show.legend = F, colour = "grey10")+
-  geom_point(data = plot_df[plot_df$colmax,], mapping = aes(x = Var2, y = Var1, size = 30), 
-             shape = "|", show.legend = F, colour = "grey10")+
+  #geom_point(data = plot_df[plot_df$rowmax,], mapping = aes(x = Var2, y = Var1, size = 30), 
+  #           shape = "—", show.legend = F, colour = "grey10")+
+  #geom_point(data = plot_df[plot_df$colmax,], mapping = aes(x = Var2, y = Var1, size = 30), 
+  #           shape = "|", show.legend = F, colour = "grey10")+
   scale_x_discrete(expand = c(0,0.7)) +
   scale_y_discrete(expand = c(0,0.7)) +
   scale_fill_gradientn(breaks = signif(c(min(cort$r)+0.005, 0, max(cort$r)-0.005),2), 
@@ -633,7 +652,7 @@ ggplot()+
   theme_classic()+
   theme(axis.title = element_text(colour = "black", face = "bold"),
         axis.text = element_text(colour = "black"),
-        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1),
+        axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0),
         legend.title = element_text(size = 9),
         legend.text = element_text(size = 8))
 

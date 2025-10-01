@@ -606,6 +606,84 @@ saveRDS(aa, file = paste0(RdataDir, 'seuratObject_merged_cellFiltered_DFout_cell
 
 
 ##########################################
+# cell type annotation from David Saini
+##########################################
+sd = readRDS(file = paste0("../data/cell_annotation_mouseSkin_scRNAseq/", 
+                           "WT.Skin.rds"))
+
+DimPlot(sd, group.by = 'cell_type_coarse', label = TRUE, repel = TRUE)
+
+DimPlot(sd, group.by = 'cell_type_fine', label = TRUE, repel = TRUE)
+
+DimPlot(sd, group.by = 'nn_cell', label = TRUE, repel = TRUE)
+
+ggsave(filename = paste0(resDir, '/mouseSkin_WT_subtypes_annotation_v1.pdf'), 
+       width = 12, height = 8)
+
+sd$subtypes = sd$nn_cell
+
+annots = sd@meta.data
+
+saveRDS(annots, file = paste0(RdataDir, 'mouseSkin_WT_subtypes_annotation_v1.rds'))
+
+rm(sd)
+
+p1 = DimPlot(sd, group.by = 'cell_type_coarse', label = TRUE, repel = TRUE)
+
+p2 = DimPlot(sd, group.by = 'cell_type_fine', label = TRUE, repel = TRUE)
+
+p1 + p2
+   
+
+
+## annotate processed data 
+aa = readRDS(file = paste0(RdataDir, 'seuratObject_merged_cellFiltered_DFout_cellCycle_umapClustering_',
+                           'celltypeAnnot.v1_',  species, version.analysis, '.rds'))
+
+annots = readRDS(file = paste0(RdataDir, 'mouseSkin_WT_subtypes_annotation_v1.rds'))
+
+
+aa$sampleID = NA
+aa$sampleID[which(aa$condition == 'ctl_dpi0')] = 'SID310697'
+aa$sampleID[which(aa$condition == 'ctl_dpi4')] = 'SID228615'
+aa$sampleID[which(aa$condition == 'ctl_dpi7')] = 'SID228613'
+aa$sampleID[which(aa$condition == 'ctl_dpi14')] = 'SID228611'
+
+aa$cellID = sapply(aa$cell.id, function(x){return(unlist(strsplit(as.character(x), '_'))[1])})
+aa$cellID = paste0(aa$sampleID, '_', aa$cellID)
+
+mm = match(aa$cellID, rownames(annots))
+aa$cell_type_coarse = annots$cell_type_coarse[mm]
+aa$cell_type_fine = annots$cell_type_fine[mm]
+aa$subtypes = annots$subtypes[mm]
+
+
+aa <- FindVariableFeatures(aa, selection.method = "vst", nfeatures = 3000)
+aa <- ScaleData(aa)
+
+aa <- RunPCA(aa, verbose = FALSE, weight.by.var = FALSE)
+ElbowPlot(aa, ndims = 30)
+
+aa <- RunUMAP(aa, dims = 1:30, n.neighbors = 30, min.dist = 0.3)
+DimPlot(aa, group.by = 'subtypes', label = TRUE, repel = TRUE)
+
+p1 = DimPlot(aa, group.by = 'celltypes', label = TRUE, repel = TRUE)
+p2 = DimPlot(aa, group.by = 'subtypes', label = TRUE, repel = TRUE)
+
+p1 + p2
+
+ggsave(filename = paste0(resDir, '/mouseSkin_WT_subtypes_borrowedFromDS.pdf'), 
+       width = 16, height = 8)
+
+
+########################################################
+########################################################
+# Section IV: analyze the macrophage and fibroblast
+# 
+########################################################
+########################################################
+
+##########################################
 # subset macrophages
 ##########################################
 aa = readRDS(file = paste0(RdataDir, 'seuratObject_merged_cellFiltered_DFout_cellCycle_umapClustering_',
