@@ -110,7 +110,7 @@ p1 + p2
 
 ggsave(filename = paste0(resDir, '/Tobie_umap.harmony_axloltol_BL_celltypes.pdf'), width = 18, height = 6)
 
-saveRDS(aa, file = paste0(RdataDir, '/axoltol_limb_Blatema_twoBacthes_harmonyMerged_fromTobi.rds'))
+saveRDS(aa, file = paste0(RdataDir, '/axoltol_limb_Blatema_twoBacthes_harmonyMerged_fromTobi_seuratV4.rds'))
 
 
 ## subsetting cell types excluding blood cells
@@ -199,7 +199,7 @@ ggsave(filename = paste0(resDir, '/Tobie_batch1Data_umap_axloltol_BL_celltypes.p
 
 
 saveRDS(aa, file = paste0(RdataDir, 
-                          '/axoltol_limbBlatema_batch1_fromTobi_filterCelltypes_geneNames.rds'))
+                          '/axoltol_limbBlatema_batch1_fromTobi_filterCelltypes_geneNames_seuratV4.rds'))
 
 ########################################################
 ########################################################
@@ -325,7 +325,7 @@ ggsave(filename = paste0(resDir,
 ########################################################
 ########################################################
 aa = readRDS(file = paste0(RdataDir, 
-                           '/axoltol_limbBlatema_batch1_fromTobi_filterCelltypes_geneNames.rds'))
+                           '/axoltol_limbBlatema_batch1_fromTobi_filterCelltypes_geneNames_seuratV4.rds'))
 
 ggs = rownames(aa)
 ggs = get_geneName(ggs)
@@ -352,6 +352,80 @@ p1 + p2
 
 ggsave(filename = paste0(resDir, '/batch1Data_umap_axloltol_BL_celltypes_.pdf'), 
        width = 16, height = 6)
+
+saveRDS(aa, file = paste0(RdataDir, 
+                           '/axoltol_limbBlatema_batch1_fromTobi_filterCelltypes_geneNames_umapUsed.rds'))
+
+
+##########################################
+# doublet searching  
+##########################################
+aa = readRDS(file = paste0(RdataDir, 
+              '/axoltol_limbBlatema_batch1_fromTobi_filterCelltypes_geneNames_seuratV4.rds'))
+
+aa = NormalizeData(aa, normalization.method = "LogNormalize", scale.factor = 10000)
+
+aa$DF_out = NA
+
+library(DoubletFinder)
+
+aa$condition = factor(aa$condition)
+Idents(aa) = aa$condition
+
+cc = unique(aa$condition)
+
+for(n in 1:length(cc))
+{
+  # n = 1
+  cat(n, '-----', as.character(cc[n]), '\n')
+  subs <- subset(aa, condition == cc[n])
+  
+  subs <- FindVariableFeatures(subs, selection.method = "vst", nfeatures = 5000)
+  subs <- ScaleData(subs)
+  
+  subs <- RunPCA(subs, verbose = TRUE)
+  subs <- FindNeighbors(subs, dims = 1:30)
+  subs <- FindClusters(subs, resolution = 0.5)
+  
+  subs <- RunUMAP(subs, dims = 1:30)
+  
+  sweep.res.list_nsclc <- paramSweep_v3(subs)
+  sweep.stats_nsclc <- summarizeSweep(sweep.res.list_nsclc, GT = FALSE)
+  bcmvn_nsclc <- find.pK(sweep.stats_nsclc)
+  
+  pK <- bcmvn_nsclc %>% # select the pK that corresponds to max bcmvn to optimize doublet detection
+    filter(BCmetric == max(BCmetric)) %>%
+    select(pK) 
+  
+  pK <- as.numeric(as.character(pK[[1]]))
+  annotations <- subs@meta.data$seurat_clusters
+  homotypic.prop <- modelHomotypic(annotations) 
+  
+  
+  nExp_poi <- round(0.076*nrow(subs@meta.data))  
+  nExp_poi.adj <- round(nExp_poi*(1-homotypic.prop))
+  
+  subs <- DoubletFinder::doubletFinder_v3(subs, PCs = 1:20, pN = 0.25, pK = pK, nExp = nExp_poi.adj,  
+                           reuse.pANN = FALSE , sct = FALSE)
+  
+  df_out = subs@meta.data
+  subs$DF_out = df_out[, grep('DF.classification', colnames(df_out))]
+  
+  aa$DF_out[match(colnames(subs), colnames(aa))] = subs$DF_out
+  
+  DimPlot(subs, label = TRUE, repel = TRUE, group.by = 'DF_out',
+          raster=FALSE)
+  ggsave(filename = paste0(resDir, '/subs_doubletFinder_out_', cc[n], version.analysis, '.pdf'), 
+         width = 12, height = 8)
+  
+  saveRDS(subs, file = paste0(RdataDir, 'subs_doubletFinder_out_', cc[n], version.analysis,  
+                              '.rds'))
+
+}
+
+DimPlot(aa, group.by = 'DF_out')
+saveRDS(aa, file = paste0(RdataDir, 
+                      '/axoltol_limbBlatema_batch1_fromTobi_filterCelltypes_geneNames_DFout_seuratV4.rds'))
 
 
 ##########################################
@@ -400,6 +474,11 @@ ggsave(filename = paste0(resDir, '/batch1Data_umap_axloltol_BL_clusters.pdf'),
 ##########################################
 # quickly check the macrophage subtype markers 
 ##########################################
+aa = readRDS(file = paste0(RdataDir, 
+                   '/axoltol_limbBlatema_batch1_DFout_FB_Mphg_subtypes.rds'))
+
+aa = subset(aa, cells = colnames(aa)[which(aa$DF_out == 'Singlet')])
+
 subs = subset(aa, cells = colnames(aa)[which(aa$celltype == "Macrophages")])
 
 subs = NormalizeData(subs, normalization.method = "LogNormalize", scale.factor = 10000)
@@ -415,11 +494,12 @@ subs <- FindClusters(subs, verbose = FALSE, algorithm = 3, resolution = 0.5)
 
 subs <- RunUMAP(subs, reduction = "pca", dims = 1:30, n.neighbors = 30,  min.dist = 0.3)
 
-p1 = DimPlot(subs, group.by = 'time', label = TRUE, repel = TRUE)
-p2 = DimPlot(subs, group.by = 'seurat_clusters', label = TRUE, repel = TRUE)
+p1 = DimPlot(subs, group.by = 'time', label = TRUE, repel = TRUE, label.size = 6)
+p2 = DimPlot(subs, group.by = 'seurat_clusters', label = TRUE, repel = TRUE, label.size = 6)
 
 p1 + p2
 
+#DimPlot(subs, group.by = 'DF_out', label = TRUE, repel = TRUE)
 ggsave(filename = paste0(resDir, '/Tobie_batch1Data_axloltolBlastema_macrophage_subclusters.pdf'), 
        width = 14, height = 6)
 
@@ -431,7 +511,7 @@ markers =  toupper(c('Adgre1', 'Cd68', 'Itgam', 'Csf1r', "H2-Ab1", 'Mertk',
 ))
 mm = match(markers, ggs)
 mm = mm[which(!is.na(mm))]
-FeaturePlot(subs, features = rownames(subs)[mm]) 
+FeaturePlot(subs, features = rownames(subs)[mm])
 
 ggsave(filename = paste0(resDir, '/batch1Data_umap_axloltol_BL_celltypes_macrophage_markers.pdf'), 
        width = 16, height = 12)
@@ -461,12 +541,17 @@ FeaturePlot(subs, features = rownames(aa)[mm])
 ggsave(filename = paste0(resDir, '/Tobie_umap.harmony_axloltol_limbBlatema_someGeneMarkers.pdf'), 
        width = 12, height = 8)
 
-FeaturePlot(subs, features = "CTSK-AMEX60DD014744")
+FeaturePlot(subs, features = c("CTSK-AMEX60DD014744", "TNF-AMEX60DD010588"))
+
 FeaturePlot(subs, features = c("FABP1-AMEX60DD046133",  'SIGLEC1-AMEX60DD015921','MARCO-AMEX60DD056028',
                              'C1QB-AMEX60DD052070', rownames(subs)[grep('MPEG1', ggs)]))
 
-
 FeaturePlot(subs, features = c('ARG1-AMEX60DD034655', 'TLR2-AMEX60DD015195', 'MARCO-AMEX60DD056028'))
+
+FeaturePlot(subs, features = c('ARG1-AMEX60DD034655', 'MARCO-AMEX60DD056028', "MPEG1-AMEX60DD007152",
+                               rownames(subs)[grep('CSF1R|TREML1|CHIT1|TREM2', rownames(subs))]))
+
+FeaturePlot(subs, features = c(rownames(subs)[grep('CSF1R|CX3CR1|ARG1|IRF5|PPAR|CHIT1|NOS2', rownames(subs))]))
 
 
 Idents(subs) = factor(subs$clusters)
@@ -490,34 +575,75 @@ kk = which(subs$clusters != 7)
 subs$subtypes[kk] = paste0('C', subs$clusters[kk], '.ax')
 
 subs$subtypes = NA
-subs$subtypes[which(subs$clusters == 0)] = 'M2.like.APOE+'
+subs$subtypes[which(subs$clusters == 0)] = 'M.APOE+'
 subs$subtypes[which(subs$clusters == 1)] = 'M.transient.ADRB2+'
 subs$subtypes[which(subs$clusters == 2)] = 'M.HBG1.2+'
-subs$subtypes[which(subs$clusters == 3)] = 'M1.TLR2+'
+subs$subtypes[which(subs$clusters == 3)] = 'M.TLR2+'
 subs$subtypes[which(subs$clusters == 4)] = 'M.CTSK+.MACRO-'
 subs$subtypes[which(subs$clusters == 5)] = 'M.ATP5+'
 subs$subtypes[which(subs$clusters == 6)] = 'M.FN1+'
-subs$subtypes[which(subs$clusters == 7)] = 'M2.like.APOE+.cycling'
+subs$subtypes[which(subs$clusters == 7)] = 'M.APOE+.cycling'
 
 
-p0 = DimPlot(subs, group.by = 'time', label = TRUE, repel = TRUE)
-p1 = DimPlot(subs, group.by = 'clusters', label = TRUE, repel = TRUE)
+p0 = DimPlot(subs, group.by = 'time', label = TRUE, repel = TRUE, label.size = 5)
+p1 = DimPlot(subs, group.by = 'clusters', label = TRUE, repel = TRUE, label.size = 5)
 p2 = DimPlot(subs, group.by = 'subtypes', label = TRUE, repel = TRUE)
 
-p0 + p2
+p0 + p1 + p2
 
 ggsave(filename = paste0(resDir, 
                          '/Tobie_batch1Data_umap_axloltol_BL_celltypes_macrophage_subtypes_time_annotations.pdf'), 
-       width = 12, height = 8)
+       width = 20, height = 6)
 
 
 saveRDS(subs, file = paste0(RdataDir, 
                           '/axoltol_limbBlatema_batch1_macrophage_time_subtypeAnnotations.rds'))
 
+rm(subs)
+
+subs = readRDS(file = paste0(RdataDir, 
+                             '/axoltol_limbBlatema_batch1_macrophage_time_subtypeAnnotations.rds'))
+
+
+aa$cluster = NA
+aa$subtypes = NA
+
+jj = match(colnames(subs), colnames(aa))
+aa$cluster[jj] = paste0('M', subs$clusters)
+aa$subtypes[jj] = subs$subtypes
 
 ##########################################
 # make plots 
 ##########################################
+## proportions of cluster at each time points
+pct = table(subs$clusters, subs$time)
+for(n in 1:ncol(pct)) pct[,n] = pct[,n]/sum(pct[,n])
+pct = data.frame(pct)
+df = pct 
+colnames(df) = c('cluster', 'condition', 'pct')
+
+ggplot(df, aes(x = condition, y = pct)) +
+  geom_bar(stat = 'identity', aes(fill = cluster)) +
+  
+  ylab("% of cluster ") + 
+  xlab("") + 
+  #ylim(0, 1.2) + 
+  theme_classic() +  
+  theme(axis.text.x = element_text(angle = 45, size = 14, vjust = 0.4),
+        axis.text.y = element_text(angle = 0, size = 14)) +
+  theme(legend.key = element_blank()) + 
+  theme(plot.margin=unit(c(1,3,1,1),"cm"))+
+  #theme(legend.position = c(0.8,.9), legend.direction = "vertical") +
+  theme(legend.title = element_blank(), 
+        legend.text = element_text(size = 14)) +
+  scale_fill_manual(values=c("darkgreen", "darkorange", "red", 'gray', 'magenta', 'black', 'green', 'blue')) 
+
+ggsave(filename = paste0(resDir, '/Tobie_batch1Data_axloltolBlastema_macrophage_subclusters_proportions.pdf'), 
+       width = 8, height = 6)
+
+
+
+
 subs = readRDS(file = paste0(RdataDir, 
                     '/axoltol_limbBlatema_batch1_macrophage_subtypes.rds'))
 
@@ -559,10 +685,13 @@ ggsave(filename = paste0(resDir, '/Tobie_batch1Data_axloltolBlastema_macrophage_
        width = 8, height = 6)
 
 
-subs = subset(aa, cells = colnames(aa)[which(aa$celltype == "Macrophages")])
+##########################################
+# annotate the FB subtypes 
+##########################################
+subs = subset(aa, cells = colnames(aa)[which(aa$celltype == "FB")])
 
 subs = NormalizeData(subs, normalization.method = "LogNormalize", scale.factor = 10000)
-subs <- FindVariableFeatures(subs, selection.method = "vst", nfeatures = 5000) # find subset-specific HVGs
+subs <- FindVariableFeatures(subs, selection.method = "vst", nfeatures = 3000) # find subset-specific HVGs
 
 subs <- ScaleData(subs, features = rownames(subs))
 subs <- RunPCA(subs, features = VariableFeatures(object = subs), verbose = FALSE, weight.by.var = TRUE)
@@ -570,62 +699,33 @@ subs <- RunPCA(subs, features = VariableFeatures(object = subs), verbose = FALSE
 ElbowPlot(subs, ndims = 50)
 
 subs <- FindNeighbors(subs, dims = 1:20)
-subs <- FindClusters(subs, verbose = FALSE, algorithm = 3, resolution = 0.5)
+subs <- FindClusters(subs, verbose = FALSE, algorithm = 3, resolution = 0.4)
 
-subs <- RunUMAP(subs, reduction = "pca", dims = 1:30, n.neighbors = 30,  min.dist = 0.3)
+subs <- RunUMAP(subs, reduction = "pca", dims = 1:30, n.neighbors = 100,  min.dist = 0.3)
 
 p1 = DimPlot(subs, group.by = 'time', label = TRUE, repel = TRUE)
 p2 = DimPlot(subs, group.by = 'seurat_clusters', label = TRUE, repel = TRUE)
 
 p1 + p2
 
-ggsave(filename = paste0(resDir, '/Tobie_batch1Data_axloltolBlastema_macrophage_subclusters.pdf'), 
+ggsave(filename = paste0(resDir, '/Tobie_batch1Data_axloltolBlastema_FB_subclusters.pdf'), 
        width = 14, height = 6)
 
 
-markers =  toupper(c('Adgre1', 'Cd68', 'Itgam', 'Csf1r', "H2-Ab1", 'Mertk',
-                     'Cd14',  'Cx3cr1', # pan macrophage
-                     'Tlr2', 'Nos2', 'Cd80', 'Cd86', 'Ifng', # M1 (pro-inflamatory)
-                     'Arg1', 'Cd163', 'Il4', 'Irf4' # M2 (anti-)
-))
+markers =  toupper(c('Procr', 'Dpt', 'Pi16', 'Col1a2', 'Acta2', 'Lum', 'Col3a1', 'Col1a1', 'Mmp2', 
+                                'Pdgfra'))
 mm = match(markers, ggs)
 mm = mm[which(!is.na(mm))]
 FeaturePlot(subs, features = rownames(subs)[mm]) 
 
-ggsave(filename = paste0(resDir, '/batch1Data_umap_axloltol_BL_celltypes_macrophage_markers.pdf'), 
+ggsave(filename = paste0(resDir, '/batch1Data_umap_axloltol_BL_celltypes_FB_markers.pdf'), 
        width = 16, height = 12)
 
 
-subs$clusters = subs$RNA_snn_res.0.5
+subs$clusters = subs$RNA_snn_res.0.4
 DimPlot(subs, group.by = 'Phase')
 
-DimPlot(subs, group.by = 'clusters', label = TRUE, repel = TRUE)
-
-
-
-# https://www.biocompare.com/Editorial-Articles/566347-A-Guide-to-Macrophage-Markers/
-markers = c('ADGRE1', 'CD14', 'CD68', 'CX3CR1', 'ITGAM', 'CSF1R', 'H2AB1', 'MERTK',# pan macrophage
-            'TLR2', 'NOS2', 'CD80', 'CD86', 'IFNG', # M1
-            'ARG1', 'CD163', 'IL4', 'IRF4', # M2
-            'FABP1', 'SIGLEC1', 'MARCO', 'C1QB', 'C1QC' #https://www.sciencedirect.com/science/article/pii/S0014482720303967
-)
-
-mm = unique(c(match(markers, ggs), match(c("CTSK-AMEX60DD014742", "CTSK-AMEX60DD014744"), rownames(subs))))
-mm = mm[which(!is.na(mm))]
-
-FeaturePlot(subs, features = rownames(aa)[mm]) 
-#&
-#scale_color_distiller(palette = "RdYlBu")
-#scale_color_viridis_c()
-ggsave(filename = paste0(resDir, '/Tobie_umap.harmony_axloltol_limbBlatema_someGeneMarkers.pdf'), 
-       width = 12, height = 8)
-
-FeaturePlot(subs, features = "CTSK-AMEX60DD014744")
-FeaturePlot(subs, features = c("FABP1-AMEX60DD046133",  'SIGLEC1-AMEX60DD015921','MARCO-AMEX60DD056028',
-                               'C1QB-AMEX60DD052070', rownames(subs)[grep('MPEG1', ggs)]))
-
-
-FeaturePlot(subs, features = c('ARG1-AMEX60DD034655', 'TLR2-AMEX60DD015195', 'MARCO-AMEX60DD056028'))
+#DimPlot(subs, group.by = 'clusters', label = TRUE, repel = TRUE)
 
 
 Idents(subs) = factor(subs$clusters)
@@ -641,37 +741,101 @@ oupMarker %>%
 DoHeatmap(subs, features = top10$gene) + NoLegend()
 
 ggsave(filename = paste0(resDir, 
-                         '/Tobie_batch1Data_umap_axloltol_BL_celltypes_macrophage_subclustering_',
+                         '/Tobie_batch1Data_umap_axloltol_BL_celltypes_FB_subclustering_',
                          'top15_annotatedMouseMarkers.pdf'), 
        width = 12, height = 20)
 
-kk = which(subs$clusters != 7)
-subs$subtypes[kk] = paste0('C', subs$clusters[kk], '.ax')
+FeaturePlot(subs, features = rownames(subs)[grep('DPT|PI16', rownames(subs))])
+
+FeaturePlot(subs, features = rownames(subs)[grep('POSTN|ACTA2|LRRC15|RUNX2', rownames(subs))])
+
+FeaturePlot(subs, features = rownames(subs)[grep('SFRP2|CTHRC1|FASTL1', rownames(subs))])
+
+FeaturePlot(subs, features = rownames(subs)[grep('PDPN|VCAM1|CSF2', rownames(subs))])
+
+FeaturePlot(subs, features = rownames(subs)[grep('TNC|SERPINE1|IL11', rownames(subs))])
+
+FeaturePlot(subs, features = rownames(subs)[grep('CD68|MARCO', rownames(subs))])
+
+FeaturePlot(subs, features = rownames(subs)[grep('IL11-|MMP1-|CXCL8|IL7R', rownames(subs))])
+
+#kk = which(subs$clusters != 7)
+#subs$subtypes[kk] = paste0('C', subs$clusters[kk], '.ax')
 
 subs$subtypes = NA
-subs$subtypes[which(subs$clusters == 0)] = 'M2.like.APOE+'
-subs$subtypes[which(subs$clusters == 1)] = 'M.transient.ADRB2+'
-subs$subtypes[which(subs$clusters == 2)] = 'M.HBG1.2+'
-subs$subtypes[which(subs$clusters == 3)] = 'M1.TLR2+'
-subs$subtypes[which(subs$clusters == 4)] = 'M.CTSK+.MACRO-'
-subs$subtypes[which(subs$clusters == 5)] = 'M.ATP5+'
-subs$subtypes[which(subs$clusters == 6)] = 'M.FN1+'
-subs$subtypes[which(subs$clusters == 7)] = 'M2.like.APOE+.cycling'
-
+subs$subtypes[which(subs$clusters == 0)] = 'FB0.POSTN+.ACTA2+'
+subs$subtypes[which(subs$clusters == 1)] = 'FB1.SERPINE1-.IL11-.TNC-'
+subs$subtypes[which(subs$clusters == 2)] = 'FB2.RUNX2+.DPT-'
+subs$subtypes[which(subs$clusters == 3)] = 'FB3.early.DPT+.TIG1+'
+subs$subtypes[which(subs$clusters == 4)] = 'FB4.early.TNC+.IL11+'
+subs$subtypes[which(subs$clusters == 5)] = 'FB5'
+subs$subtypes[which(subs$clusters == 6)] = 'FB6.early.CD68+.MACRO+'
+subs$subtypes[which(subs$clusters == 7)] = 'FB7'
+subs$subtypes[which(subs$clusters == 8)] = 'FB8'
 
 p0 = DimPlot(subs, group.by = 'time', label = TRUE, repel = TRUE)
 p1 = DimPlot(subs, group.by = 'clusters', label = TRUE, repel = TRUE)
 p2 = DimPlot(subs, group.by = 'subtypes', label = TRUE, repel = TRUE)
 
-p0 + p2
+p0 + p1 +p2
 
 ggsave(filename = paste0(resDir, 
-                         '/Tobie_batch1Data_umap_axloltol_BL_celltypes_macrophage_subtypes_time_annotations.pdf'), 
-       width = 12, height = 8)
+                         '/Tobie_batch1Data_umap_axloltol_BL_celltypes_FB_subtypes_time_annotations.pdf'), 
+       width = 20, height = 6)
 
 
 saveRDS(subs, file = paste0(RdataDir, 
-                            '/axoltol_limbBlatema_batch1_macrophage_time_subtypeAnnotations.rds'))
+                            '/axoltol_limbBlatema_batch1_FB_time_subtypeAnnotations.rds'))
+
+subs = readRDS(file = paste0(RdataDir, 
+                             '/axoltol_limbBlatema_batch1_FB_time_subtypeAnnotations.rds'))
+
+jj = match(colnames(subs), colnames(aa))
+aa$cluster[jj] = paste0('FB', subs$clusters)
+aa$subtypes[jj] = subs$subtypes
+
+jj = which(is.na(aa$subtypes))
+aa$subtypes[jj] = aa$celltype[jj]
+aa$cluster[jj] = aa$celltype[jj]
+
+
+DimPlot(aa, group.by = 'cluster', label = TRUE, repel = TRUE, label.size = 5) + NoLegend()
+ggsave(filename = paste0(resDir, '/Tobie_batch1Data_axloltolBlastema_FB_M_others.pdf'), 
+       width = 8, height = 6)
+
+aa$time = droplevels(aa$time)
+DimPlot(aa, group.by = 'cluster', label = TRUE, repel = TRUE, label.size = 5, split.by = 'time') + 
+  NoLegend()
+
+ggsave(filename = paste0(resDir, '/Tobie_batch1Data_axloltolBlastema_FB_M_others_timePoints.pdf'), 
+       width = 24, height = 6)
+
+
+saveRDS(aa, file = paste0(RdataDir, 
+                          '/axoltol_limbBlatema_batch1_fromTobi_filterCelltypes_geneNames_FB_Mphg_subtypes.rds'))
+
+aa = readRDS(file = paste0(RdataDir, 
+                           '/axoltol_limbBlatema_batch1_fromTobi_filterCelltypes_geneNames_FB_Mphg_subtypes.rds'))
+
+
+xx = readRDS(file = paste0(RdataDir, 
+                           '/axoltol_limbBlatema_batch1_fromTobi_filterCelltypes_geneNames_DFout_seuratV4.rds'))
+
+aa$DF_out = xx$DF_out[match(colnames(aa), colnames(xx))]
+
+DimPlot(aa, group.by = 'DF_out')
+
+saveRDS(aa, file = paste0(RdataDir, 
+                              '/axoltol_limbBlatema_batch1_DFout_FB_Mphg_subtypes.rds'))
+        
+
+########################################################
+########################################################
+# Section IV: cell-cell communication analysis using CellChat
+# 
+########################################################
+########################################################
+
 
 
 
