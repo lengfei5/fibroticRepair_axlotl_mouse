@@ -20,7 +20,7 @@ library(ggplot2)
 library(pheatmap)
 library(RColorBrewer)
 library(data.table)
-library("viridis")
+#library("viridis")
 
 version.analysis = '_axolotl_20250829'
 resDir = paste0("../results/scRNAseq_analysis_immune", version.analysis, '/')
@@ -324,8 +324,11 @@ ggsave(filename = paste0(resDir,
 # subclustering macrophage and fibroblast for Elly and Sabine's grant application
 ########################################################
 ########################################################
+#aa = readRDS(file = paste0(RdataDir, 
+#                           '/axoltol_limbBlatema_batch1_fromTobi_filterCelltypes_geneNames_seuratV4.rds'))
 aa = readRDS(file = paste0(RdataDir, 
-                           '/axoltol_limbBlatema_batch1_fromTobi_filterCelltypes_geneNames_seuratV4.rds'))
+                                   '/axoltol_limbBlatema_batch1_DFout_filterCelltypes_geneNames_',
+                                   'FB_Mphg_subtypes_v2.rds'))
 
 ggs = rownames(aa)
 ggs = get_geneName(ggs)
@@ -651,7 +654,7 @@ saveRDS(subs, file = paste0(RdataDir,
 
 
 subs = readRDS(file = paste0(RdataDir, 
-                             '/axoltol_limbBlatema_batch1_macrophage_time_subtypeAnnotations.rds'))
+                             '/axoltol_limbBlatema_batch1_macrophage_time_subtypeAnnotations_v2.rds'))
 
 
 aa$cluster = NA
@@ -905,20 +908,20 @@ DimPlot(aa, group.by = 'cluster', label = TRUE, repel = TRUE, label.size = 5) + 
 ggsave(filename = paste0(resDir, '/Tobie_batch1Data_axloltolBlastema_FB_M_others_v2.pdf'), 
        width = 8, height = 6)
 
-aa$time = droplevels(aa$time)
-DimPlot(aa, group.by = 'cluster', label = TRUE, repel = TRUE, label.size = 5, split.by = 'time') + 
-  NoLegend()
-
-ggsave(filename = paste0(resDir, '/Tobie_batch1Data_axloltolBlastema_FB_M_others_timePoints.pdf'), 
-       width = 24, height = 6)
+# aa$time = droplevels(aa$time)
+# DimPlot(aa, group.by = 'cluster', label = TRUE, repel = TRUE, label.size = 5, split.by = 'time') + 
+#   NoLegend()
+# 
+# ggsave(filename = paste0(resDir, '/Tobie_batch1Data_axloltolBlastema_FB_M_others_timePoints.pdf'), 
+#        width = 24, height = 6)
 
 
 saveRDS(aa, file = paste0(RdataDir, 
-                          '/axoltol_limbBlatema_batch1_fromTobi_filterCelltypes_geneNames_FB_Mphg_subtypes.rds'))
+                          '/axoltol_limbBlatema_batch1_DFout_filterCelltypes_geneNames_FB_Mphg_subtypes_v2.rds'))
 
-aa = readRDS(file = paste0(RdataDir, 
-                           '/axoltol_limbBlatema_batch1_fromTobi_filterCelltypes_geneNames_FB_Mphg_subtypes.rds'))
-
+# aa = readRDS(file = paste0(RdataDir, 
+#                            '/axoltol_limbBlatema_batch1_fromTobi_filterCelltypes_geneNames_FB_Mphg_subtypes.rds'))
+# 
 
 # xx = readRDS(file = paste0(RdataDir, 
 #                            '/axoltol_limbBlatema_batch1_fromTobi_filterCelltypes_geneNames_DFout_seuratV4.rds'))
@@ -957,7 +960,7 @@ ggplot(df, aes(x = condition, y = pct)) +
   #scale_fill_manual(values=c("#054674", '#25aff5', "#4d7ea9", '#D4D915','#ff9a36','#B95FBB'))
 #'#31C53F', "darkgreen", "darkorange", "red", 'magenta', 'gray', 'green', 'blue', 'black')) 
 
-ggsave(filename = paste0(resDir, '/axloltol_Blastema_macrophage_subclusters_proportions.pdf'), 
+ggsave(filename = paste0(resDir, '/axloltol_Blastema_FB_subclusters_proportions.pdf'), 
        width = 12, height = 6)
 
 
@@ -967,8 +970,185 @@ ggsave(filename = paste0(resDir, '/axloltol_Blastema_macrophage_subclusters_prop
 # 
 ########################################################
 ########################################################
+library(pryr) # monitor the memory usage
+require(ggplot2)
+#library(nichenetr)
+library(Seurat) # please update to Seurat V4
+library(tidyverse)
+library(circlize)
+library(RColorBrewer)
+require(scran)
+require(scater)
+#library(nichenetr)
+library(tidyverse)
+library(circlize)
+library(randomcoloR)
+
+source(paste0(functionDir, '/functions_scRNAseq.R'))
+source(paste0(functionDir, '/functions_Visium.R'))
 
 
+refs = readRDS(file = paste0(RdataDir, 
+                            '/axoltol_limbBlatema_batch1_DFout_filterCelltypes_geneNames_',
+                           'FB_Mphg_subtypes_v2.rds'))
+
+subref = subset(refs, cells = colnames(refs)[which(refs$celltype == 'FB'| refs$celltype == 'Macrophages')])
 
 
+# run LIANA day by day
+timepoint_specific = TRUE
 
+times_slice = unique(subref$time)
+#times_slice = c('d7')
+
+subtypes = unique(subref$subtypes)
+species = 'ax6'
+
+# set parameter for ligand-receptor analysis
+outDir_version = paste0(resDir, 'Ligand_Receptor_analysis_liana')
+if(!dir.exists(outDir_version)) dir.create(outDir_version)
+
+
+##########################################
+# run LIANA for all pairs
+##########################################
+sce <- as.SingleCellExperiment(subref)
+colLabels(sce) = as.factor(sce$celltype)
+
+if(species == 'ax6'){
+  rownames(sce) = toupper(get_geneName(rownames(sce)))
+}else{
+  rownames(sce) = toupper(rownames(sce))
+}
+
+ave.counts <- calculateAverage(sce, assay.type = "counts")
+
+num.cells <- nexprs(sce, byrow=TRUE)
+smoothScatter(log10(ave.counts), num.cells, ylab="Number of cells",
+              xlab=expression(Log[10]~"average count"))
+
+# detected in >= 5 cells, ave.counts >=5 but not too high
+genes.to.keep <- num.cells > 20 & ave.counts >= 10^-4  & ave.counts <10^3  
+summary(genes.to.keep)
+
+sce <- sce[genes.to.keep, ]
+
+## run the liana wrap function by specifying resource and methods
+# Resource currently included in OmniPathR (and hence `liana`) include:
+show_resources()
+# Resource currently included in OmniPathR (and hence `liana`) include:
+show_methods()
+
+if(min(exec("logcounts", sce)) < 0){
+  xx = logcounts(sce)
+  xx[which(xx<0)] = 0
+  xx = Matrix(xx, sparse = TRUE)
+  logcounts(sce) = xx
+  rm(xx)
+}
+
+liana_test <- liana_wrap(sce,  
+                         # method = c("natmi", "connectome", "logfc", "sca", "cytotalk"),
+                         method = c("natmi", "connectome", "logfc", "sca"),
+                         #resource = c("Consensus", 'CellPhoneDB', "OmniPath", "LRdb", "CellChatDB",  
+                         # "CellTalkDB"), 
+                         resource = c("Consensus"),
+                         assay.type = "logcounts", 
+                         idents_col = 'subtypes')
+
+# Liana returns a list of results, each element of which corresponds to a method
+# liana_test %>% glimpse
+
+# We can aggregate these results into a tibble with consensus ranks
+liana_test <- liana_test %>%
+  liana_aggregate(resource = 'Consensus')
+
+saveRDS(liana_test, file = paste0(outDir_version, '/res_lianaTest_Consensus_subtypes_allpairs.rds'))
+
+
+##########################################
+# make ligand-receptor plots 
+##########################################
+## test celltalker
+library(celltalker)
+library(SeuratData)
+library(Connectome)
+library(cowplot)
+
+liana_test = readRDS(file = paste0(outDir_version, '/res_lianaTest_Consensus_subtypes_allpairs.rds'))
+
+pct_cutoff = 0.05
+
+for(n in 1:length(times_slice))
+{
+  # n = 3
+  
+  time = times_slice[n]
+  cat(' run LIANA for time -- ', as.character(time), '\n')
+  
+  outDir = paste(outDir_version, '/', time, collapse = '')
+  outDir = gsub(' ', '', outDir)
+  if(!dir.exists(outDir)) dir.create(outDir)
+  
+  #for(n in 1:ncol(pct)) pct[,n] = pct[,n]/sum(pct[,n])
+  
+  pct_FB = table(subref$subtypes[which(subref$time == time & subref$celltype == 'FB')])
+  pct_FB = pct_FB/sum(pct_FB)
+  subtypes_FB = names(pct_FB)[which(pct_FB >= pct_cutoff)]
+  
+  pct_M = table(subref$subtypes[which(subref$time == time & subref$celltype == 'Macrophages')])
+  pct_M = pct_M/sum(pct_M)
+  subtypes_M = names(pct_M)[which(pct_M >= pct_cutoff)]
+  
+  source(paste0(functionDir, "/functions_cccInference.R"))
+  
+  #res = aggregate_output_LIANA(liana_out = paste(outDir))
+  res = data.frame(liana_test)
+  
+  ii = which(!is.na(match(res$source, subtypes_FB)) & !is.na(match(res$target, subtypes_M)))
+  jj = which(!is.na(match(res$source, subtypes_M)) & !is.na(match(res$target, subtypes_FB)))
+  
+  res = res[unique(c(ii, jj)), ]
+  
+  
+  #colnames(res)[1:2] = c('source', 'target')
+  colnames(res)[3:4] = c('ligand', 'receptor')
+  
+  res$weight_norm = res$sca.LRscore
+  res$pair = paste0(res$ligand, ' - ', res$receptor)
+  res$vector = paste0(res$source, ' - ', res$target)
+  res$edge = paste0(res$source, ' - ', res$ligand, ' - ', res$receptor, ' - ', res$target)
+  res$source.ligand = paste0(res$source, ' - ', res$ligand)
+  res$receptor.target = paste0(res$receptor, ' - ', res$target)
+  
+  source(paste0(functionDir, '/functions_cccInference.R'))
+  
+  pdfname = paste0(outDir, '/LR_interactions_allPairs_LIANA_tops.pdf')
+  pdf(pdfname, width=12, height = 8)
+  
+  for(ntop in c(100, 200, 300))
+  {
+    # ntop = 100
+    test = res[c(1:ntop), ]
+    test = test[which(test$ligand != 'ACTR2'), ] ## for unknow reason this ligand making problem for plots
+    
+    #colnames(test)[1:4] = c('sender', 'receiver', 'ligand', 'receptor')
+    
+    cells.of.interest = unique(c(test$source, test$target))
+    cell_color = randomcoloR::distinctColorPalette(length(cells.of.interest))
+    names(cell_color) <- cells.of.interest
+    
+    my_CircosPlot(test, 
+                  weight.attribute = 'weight_norm',
+                  cols.use = cell_color,
+                  sources.include = cells.of.interest,
+                  targets.include = cells.of.interest,
+                  lab.cex = 0.5,
+                  title = paste('LR scores top :', ntop))
+    
+  }
+  
+  dev.off()
+  
+  
+}
