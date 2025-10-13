@@ -678,9 +678,14 @@ ggsave(filename = paste0(resDir, '/mouseSkin_WT_subtypes_borrowedFromDS.pdf'),
        width = 16, height = 8)
 
 
-
+########################################################
+########################################################
+# Section IV: analyze the macrophage and fibroblast
+# 
+########################################################
+########################################################
 ##########################################
-# subset the macrophage to reproduce the results from David and Sebastian 
+# import directly the macrophage subtypes from David and Sebastian 
 ##########################################
 sd = readRDS(file = paste0("../data/cell_annotation_mouseSkin_scRNAseq/", 
                            "WT.Skin.Macrophages.rds"))
@@ -695,30 +700,25 @@ ggsave(filename = paste0(resDir, '/mouseSkin_WT_subtypes_borrowedFromDS.pdf'),
 
 
 
-DimPlot(sd, group.by = 'cell_type_fine', label = TRUE, repel = TRUE)
-
-DimPlot(sd, group.by = 'nn_cell', label = TRUE, repel = TRUE)
-
-sd = subset(sd, cells = colnames(sd)[which(sd$cell_type_fine == 'MacDC'| sd$cell_type_fine == 'Macrophage')])
-
-sd <- FindVariableFeatures(sd, selection.method = "vst", nfeatures = 3000)
-sd <- ScaleData(sd)
-
-sd <- RunPCA(sd, verbose = FALSE, weight.by.var = FALSE)
-ElbowPlot(sd, ndims = 30)
-
-sd <- RunUMAP(sd, dims = 1:20, n.neighbors = 30, min.dist = 0.3)
-
-DimPlot(sd, group.by = 'nn_cell', label = TRUE, repel = TRUE)
-
-
-
-########################################################
-########################################################
-# Section IV: analyze the macrophage and fibroblast
+# DimPlot(sd, group.by = 'cell_type_fine', label = TRUE, repel = TRUE)
 # 
-########################################################
-########################################################
+# DimPlot(sd, group.by = 'nn_cell', label = TRUE, repel = TRUE)
+# 
+# sd = subset(sd, cells = colnames(sd)[which(sd$cell_type_fine == 'MacDC'| sd$cell_type_fine == 'Macrophage')])
+# 
+# sd <- FindVariableFeatures(sd, selection.method = "vst", nfeatures = 3000)
+# sd <- ScaleData(sd)
+# 
+# sd <- RunPCA(sd, verbose = FALSE, weight.by.var = FALSE)
+# ElbowPlot(sd, ndims = 30)
+# 
+# sd <- RunUMAP(sd, dims = 1:20, n.neighbors = 30, min.dist = 0.3)
+# 
+# DimPlot(sd, group.by = 'nn_cell', label = TRUE, repel = TRUE)
+
+
+saveRDS(sd, file = paste0(RdataDir, '/mouse_skin_macrophage_subtypes_SD.rds'))
+
 
 ##########################################
 # subset macrophages

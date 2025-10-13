@@ -805,7 +805,7 @@ ggsave(filename = paste0(resDir, '/axoltol_blastema_macrophage_embryonicMarkers.
 # compare the axolotl macrophages with mouse in pro-fibrotic activation  
 ##########################################
 subs = readRDS(file = paste0(RdataDir, 
-                             '/axoltol_limbBlatema_batch1_macrophage_time_subtypeAnnotations_rmEpidermis_v3.rds'))
+              '/axoltol_limbBlatema_batch1_macrophage_time_subtypeAnnotations_rmEpidermis_v3.rds'))
 
 
 genes = rownames(subs)[grep('MERTK|CD36|MRC1|CD163', rownames(subs))]

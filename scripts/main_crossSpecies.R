@@ -20,7 +20,7 @@ library(ggplot2)
 library(pheatmap)
 library(RColorBrewer)
 library(data.table)
-library("viridis")
+#library("viridis")
 library(SeuratDisk)
 
 version.analysis = '_crossSpecies_20250903'
@@ -73,13 +73,22 @@ sps = toupper(sps)
 ##########################################
 # import ax, nm, mm data 
 ##########################################
-ax = readRDS(file = paste0(RdataDir, 'axoltol_limbBlatema_batch1_macrophage_subtypes.rds'))
-mm = readRDS(file = paste0(RdataDir, 'mouse_skin_macrophage_subtypes.rds'))
+ax = readRDS(file = paste0(RdataDir, 
+                '/axoltol_limbBlatema_batch1_macrophage_time_subtypeAnnotations_rmEpidermis_v3.rds'))
+
 
 ax$species = 'ax'
 ax$time = droplevels(ax$time)
-ax$subtypes[which(ax$subtypes == 'cycling')] = 'cycling.ax'
+ax$cluster[which(ax$subtypes == "M0.CXCR4.TLR5.pro-inflammatory")] = 'M1' 
+ax$cluster[which(ax$subtypes == "M1.APOE.PPARG.anti-inflammatory")] = 'M2' 
+ax$cluster[which(ax$subtypes == "M3.CXCR1.DYSF.pro-inflammatory")] = 'M3' 
+ax$cluster[which(ax$subtypes == "M4.ARG1-.CSF1R-.MPEG1-")] = 'M4' 
+ax$cluster[which(ax$subtypes == "M7.CTSK+.TREML1+.MARCO.low")] = 'M5'
 
+
+#ax$subtypes[which(ax$subtypes == 'cycling')] = 'cycling.ax'
+
+mm = readRDS(file = paste0(RdataDir, '/mouse_skin_macrophage_subtypes_SD.rds'))
 mm$species = 'mm'
 mm$subtypes[which(mm$subtypes == 'cycling')] = 'cycling.mm'
 
