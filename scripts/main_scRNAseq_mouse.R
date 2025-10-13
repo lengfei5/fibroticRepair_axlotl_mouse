@@ -21,7 +21,7 @@ library(ggplot2)
 library(pheatmap)
 library(RColorBrewer)
 library(data.table)
-library("viridis")
+#library("viridis")
 library(DropletUtils)
 
 species = 'mouse'
@@ -613,6 +613,9 @@ sd = readRDS(file = paste0("../data/cell_annotation_mouseSkin_scRNAseq/",
 
 DimPlot(sd, group.by = 'cell_type_coarse', label = TRUE, repel = TRUE)
 
+DimPlot(sd, group.by = 'seurat_clusters', label = TRUE, repel = TRUE)
+
+
 DimPlot(sd, group.by = 'cell_type_fine', label = TRUE, repel = TRUE)
 
 DimPlot(sd, group.by = 'nn_cell', label = TRUE, repel = TRUE)
@@ -634,7 +637,6 @@ p2 = DimPlot(sd, group.by = 'cell_type_fine', label = TRUE, repel = TRUE)
 
 p1 + p2
    
-
 
 ## annotate processed data 
 aa = readRDS(file = paste0(RdataDir, 'seuratObject_merged_cellFiltered_DFout_cellCycle_umapClustering_',
@@ -674,6 +676,41 @@ p1 + p2
 
 ggsave(filename = paste0(resDir, '/mouseSkin_WT_subtypes_borrowedFromDS.pdf'), 
        width = 16, height = 8)
+
+
+
+##########################################
+# subset the macrophage to reproduce the results from David and Sebastian 
+##########################################
+sd = readRDS(file = paste0("../data/cell_annotation_mouseSkin_scRNAseq/", 
+                           "WT.Skin.Macrophages.rds"))
+
+p1 = DimPlot(sd, group.by = 'stage.m', label = TRUE, repel = TRUE)
+p2 = DimPlot(sd, group.by = 'condition', label = TRUE, repel = TRUE)
+
+p1 + p2
+
+ggsave(filename = paste0(resDir, '/mouseSkin_WT_subtypes_borrowedFromDS.pdf'), 
+       width = 16, height = 8)
+
+
+
+DimPlot(sd, group.by = 'cell_type_fine', label = TRUE, repel = TRUE)
+
+DimPlot(sd, group.by = 'nn_cell', label = TRUE, repel = TRUE)
+
+sd = subset(sd, cells = colnames(sd)[which(sd$cell_type_fine == 'MacDC'| sd$cell_type_fine == 'Macrophage')])
+
+sd <- FindVariableFeatures(sd, selection.method = "vst", nfeatures = 3000)
+sd <- ScaleData(sd)
+
+sd <- RunPCA(sd, verbose = FALSE, weight.by.var = FALSE)
+ElbowPlot(sd, ndims = 30)
+
+sd <- RunUMAP(sd, dims = 1:20, n.neighbors = 30, min.dist = 0.3)
+
+DimPlot(sd, group.by = 'nn_cell', label = TRUE, repel = TRUE)
+
 
 
 ########################################################
