@@ -76,24 +76,107 @@ sps = toupper(sps)
 ax = readRDS(file = paste0(RdataDir, 
                 '/axoltol_limbBlatema_batch1_macrophage_time_subtypeAnnotations_rmEpidermis_v3.rds'))
 
+#ax[["RNA"]] <- as(object = ax[["RNA5"]], Class = "Assay")
 
 ax$species = 'ax'
 ax$time = droplevels(ax$time)
-ax$cluster[which(ax$subtypes == "M0.CXCR4.TLR5.pro-inflammatory")] = 'M1' 
-ax$cluster[which(ax$subtypes == "M1.APOE.PPARG.anti-inflammatory")] = 'M2' 
-ax$cluster[which(ax$subtypes == "M3.CXCR1.DYSF.pro-inflammatory")] = 'M3' 
-ax$cluster[which(ax$subtypes == "M4.ARG1-.CSF1R-.MPEG1-")] = 'M4' 
-ax$cluster[which(ax$subtypes == "M7.CTSK+.TREML1+.MARCO.low")] = 'M5'
 
+p1 = DimPlot(ax, group.by = 'cluster', label = TRUE, repel =  TRUE)
+p2 = DimPlot(ax, group.by = 'subtypes', label = TRUE, repel =  TRUE) + NoLegend()
+p1 + p2
+
+ax$cluster[which(ax$subtypes == "M0.CXCR4.TLR5.pro-inflammatory")] = 'M1'
+
+ax$cluster[which(ax$subtypes == "M1.APOE.PPARG.anti-inflammatory" & ax$cluster == 'M1')] = 'M2' 
+ax$cluster[which(ax$subtypes == "M3.CXCR1.DYSF.pro-inflammatory")] = 'M3' 
+ax$cluster[which(ax$subtypes == "M7.CTSK+.TREML1+.MARCO.low")] = 'M4'
+ax$cluster[which(ax$subtypes == "M4.ARG1-.CSF1R-.MPEG1-")] = 'M5' 
+ax$cluster[which(ax$subtypes == "M1.APOE.PPARG.anti-inflammatory" & ax$cluster == 'M6')] = 'M6.cyling' 
 
 #ax$subtypes[which(ax$subtypes == 'cycling')] = 'cycling.ax'
 
+p2 = DimPlot(ax, group.by = 'cluster', label = TRUE, repel =  TRUE)
+
+mm = readRDS(file = paste0(RdataDir, '/mouse_skin_macrophage_subtypes_SD.rds'))
+
+mm$species = 'mm'
+#mm$subtypes[which(mm$subtypes == 'cycling')] = 'cycling.mm'
+mm$time = droplevels(mm$condition)
+mm$subtypes = mm$stage.m
+mm$cluster = mm$stage.m
+
+p1 = DimPlot(mm, group.by = 'cluster', label = TRUE, repel =  TRUE)
+
+p1 + p2
+
+ggsave(filename = paste0(resDir, '/cross_species_macrophageData_mm_ax.pdf'), 
+       width = 16, height = 6)
+
+
+# convert a v5 assay to a v4 assay
+xx = scCustomize::Convert_Assay(ax, assay = 'RNA', convert_to = 'V3')
+
+saveRDS(xx, file = paste0(RdataDir, 
+                '/axoltol_limbBlatema_batch1_macrophage_time_subtypeAnnotations_rmEpidermis_v3_seuratv3.rds'))
+
+#ax[["RNA4"]] <- as(object = ax[["RNA"]], Class = "Assay")
+#DefaultAssay(ax) = 'RNA4'
+
+DefaultAssay(mm) = 'RNA'
+mm = NormalizeData(mm, normalization.method = "LogNormalize", scale.factor = 10000)
+mm <- FindVariableFeatures(mm, selection.method = "vst", nfeatures = 3000) # find subset-specific HVGs
+
+mm <- ScaleData(mm, features = rownames(mm))
+
+
+xx = scCustomize::Convert_Assay(mm, assay = 'RNA', convert_to = 'V3')
+
+save(xx, file = paste0(RdataDir, '/mouse_skin_macrophage_subtypes_SD_seuratv3.rds'))
+
+##########################################
+# check the pro-fibrotic macrophage activation 
+##########################################
+ax = readRDS(file = paste0(RdataDir, 
+                           '/axoltol_limbBlatema_batch1_macrophage_time_subtypeAnnotations_rmEpidermis_v3_seuratv3.rds'))
+
+jj = which(ax$cluster == 'M6.cyling')
+ax$cluster[jj] = 'M2'
+ax$subtypes[jj] = 'M1.APOE.PPARG.anti-inflammatory'
+
+DimPlot(ax, group.by = 'cluster', label = TRUE, repel = TRUE)
+
+
+genes = c(rownames(ax)[grep('CLEC10A|NINJ1|TREM2|FABP5|GPNMB|IGF1-|MS4A7|GAS6', 
+                            rownames(ax))], "SPP1-AMEX60DD043905")
+
+FeaturePlot(ax, features = genes, ncol = 3) &
+  scale_color_gradient(low = "grey", high = "brown")
+
+ggsave(filename = paste0(resDir, '/axoltol_macrophage_proFibrotic_genes.pdf'), 
+       width = 16, height = 8)
+
+
+##########################################
+# ## define the one-on-one ortholog between axololt and mice
+##########################################
+ax = readRDS(file = paste0(RdataDir, 
+            '/axoltol_limbBlatema_batch1_macrophage_time_subtypeAnnotations_rmEpidermis_v3_seuratv3.rds'))
+
+DimPlot(ax, group.by = 'cluster', label = TRUE, repel = TRUE)
+
+jj = which(ax$cluster == 'M6.cyling')
+ax$cluster[jj] = 'M2'
+ax$subtypes[jj] = 'M1.APOE.PPARG.anti-inflammatory'
+
+
+
 mm = readRDS(file = paste0(RdataDir, '/mouse_skin_macrophage_subtypes_SD.rds'))
 mm$species = 'mm'
-mm$subtypes[which(mm$subtypes == 'cycling')] = 'cycling.mm'
+#mm$subtypes[which(mm$subtypes == 'cycling')] = 'cycling.mm'
+mm$time = droplevels(mm$condition)
+mm$subtypes = mm$stage.m
+mm$cluster = mm$stage.m
 
-
-## define the one-on-one ortholog between axololt and mice
 an_orthologs = data.frame(ref = rownames(ax), query = rownames(ax))
 rownames(an_orthologs) = an_orthologs$ref
 an_orthologs$query = sapply(an_orthologs$query, 
@@ -119,7 +202,7 @@ aa = subset(mm, features = an_orthologs$query)
 
 rm(mm)
 
-counts = ax@assays$RNA@layers$counts
+counts = ax@assays$RNA@counts
 metadata = ax@meta.data
 counts = counts[match(an_orthologs$ref, rownames(ax)), ]
 rownames(counts) = an_orthologs$query
@@ -127,22 +210,42 @@ rownames(counts) = an_orthologs$query
 new_ax <- CreateSeuratObject(counts=counts, assay = 'RNA', meta.data = metadata)
 new_ax<- NormalizeData(new_ax, normalization.method = "LogNormalize", scale.factor = 10000)
 new_ax <- FindVariableFeatures(new_ax, selection.method = "vst", nfeatures = 5000)
-
 new_ax <- ScaleData(new_ax, features = rownames(new_ax))
 
-aa = merge(aa, y = new_ax, add.cell.ids = c("m", "ax"), project = "skinRepair")
+new_ax[['umap']] = ax[['umap']] 
 
-rm(list = c('counts', 'metadata', 'ax'))
+counts = aa@assays$SCT@counts
+metadata = aa@meta.data
+#counts = counts[match(an_orthologs$ref, rownames(ax)), ]
+#rownames(counts) = an_orthologs$query
 
-rm(new_ax)
+new_aa <- CreateSeuratObject(counts=counts, assay = 'RNA', meta.data = metadata)
+new_aa<- NormalizeData(new_aa, normalization.method = "LogNormalize", scale.factor = 10000)
+new_aa <- FindVariableFeatures(new_aa, selection.method = "vst", nfeatures = 5000)
+new_aa <- ScaleData(new_aa, features = rownames(new_aa))
 
-saveRDS(aa, file = paste0(RdataDir, 'mm_ax_scRNAseq_merged_forSeurat_v2.rds'))
+new_aa[["umap"]] <- aa[['umap']]
 
-##########################################
-# test Seurat 
-##########################################
+DimPlot(new_aa, group.by = 'cluster', label = TRUE, repel =  TRUE)
+
+aa = merge(new_aa, y = new_ax, add.cell.ids = c("m", "ax"), project = "skinRepair")
+
+#rm(list = c('counts', 'metadata', 'ax'))
+#rm(new_ax)
+
+saveRDS(new_aa, file = paste0(RdataDir, 'mm_scRNAseq_for_crossSpecies_v3.rds'))
+saveRDS(new_ax, file = paste0(RdataDir, 'ax_scRNAseq_for_crossSpecies_v3.rds'))
+saveRDS(aa, file = paste0(RdataDir, 'mm_ax_scRNAseq_for_crossSpecies_v3.rds'))
+
+########################################################
+########################################################
+# Section I: # test Seurat integration 
+# 
+########################################################
+########################################################
 source(paste0(functionDir, 'functions_dataIntegration.R'))
-aa = readRDS(file = paste0(RdataDir, 'mm_ax_scRNAseq_merged_forSeurat_v1.rds'))
+
+aa = readRDS(file = paste0(RdataDir, 'mm_ax_scRNAseq_for_crossSpecies_v3.rds'))
 
 aa = ScaleData(aa, features = rownames(aa))
 #method = 'Harmony'
@@ -152,6 +255,7 @@ if(method == 'Seurat_RPCA'){
                                            group.by = 'species', 
                                            nfeatures = 5000,
                                            #merge.order = matrix(c(-2, 1, -3, -1), ncol = 2),
+                                           reference = 2,
                                            redo.normalization.scaling = FALSE,
                                            correct.all = FALSE)
   
@@ -174,7 +278,7 @@ if(method == 'Seurat_CCA'){
   ref.combined = IntegrateData_Seurat_CCA(aa, 
                                           group.by = 'species', 
                                           nfeatures = 5000,
-                                          #reference = 'mm',
+                                          reference = c(2),
                                           ndims = c(1:50),
                                           k.anchor = 10,
                                           k.weight = 100,
@@ -202,7 +306,42 @@ if(method == 'Seurat_CCA'){
   
 }
 
+##########################################
+# use CCA integration but use reference 
+##########################################
+mm = readRDS(file = paste0(RdataDir, 'mm_scRNAseq_for_crossSpecies_v3.rds'))
+ax = readRDS(file = paste0(RdataDir, 'ax_scRNAseq_for_crossSpecies_v3.rds'))
 
+ax$subtypes = ax$cluster
+
+aa = merge(mm, y = ax, add.cell.ids = c("m", "ax"), project = "skinRepair")
+
+source(paste0(functionDir, 'functions_dataIntegration.R'))
+ref.combined = IntegrateData_Seurat_CCA(aa, 
+                                        group.by = 'species', 
+                                        nfeatures = 3000,
+                                        reference = c(2),
+                                        ndims = c(1:30),
+                                        k.anchor = 10,
+                                        k.weight = 100,
+                                        #merge.order = matrix(c(-2, 1, -3, -1), ncol = 2),
+                                        redo.normalization.scaling = TRUE,
+                                        correct.all = FALSE)
+
+p1 = DimPlot(ref.combined, group.by = 'subtypes', label = TRUE, repel = TRUE, raster=FALSE) + 
+  ggtitle('Seurat_CCA')
+p2 = DimPlot(ref.combined, group.by = 'species', label = TRUE, repel = TRUE) +
+  ggtitle("Seurat_CCA")
+
+p1 + p2
+
+ggsave(filename = paste0(resDir, '/cross_species_mapping_Seurat_CCA.pdf'), 
+       width = 16, height = 6)
+
+
+##########################################
+# Harmony integration
+##########################################
 if(method == 'Harmony'){
   source(paste0(functionDir, 'functions_dataIntegration.R'))
   ref.combined = IntegrateData_runHarmony(aa, 
@@ -226,6 +365,322 @@ if(method == 'Harmony'){
          width = 16, height = 6)
   
   saveRDS(ref.combined, file = paste0(resDir, 'mm_ax_scRNAseq_crossSpecies_Harmony.rds'))
+  
+  
+}
+
+
+##########################################
+# label transferring with CCA 
+##########################################
+mapping_method = "seurat_query_ref_mapping"
+
+ref = mm
+
+data_version = 'mapping_mNT.noRA.RA.d2_d5_Marioni2019_selectedCelltypes_test2'
+
+#features.common = intersect(rownames(aa), rownames(ref))
+#aa = subset(aa, features = features.common)
+#ref = subset(ref, features = features.common)
+
+# aa$dataset = 'mNT'
+# aa$stage = aa$condition
+# aa$sequencing.batch = 'mNT'
+# ref$dataset = 'ref'
+# 
+# aa$celltype = paste0('mNT_', aa$condition)
+# 
+# outDir = paste0(resDir,  mapping_method, '/', data_version, '/')
+# system(paste0('mkdir -p ', outDir))
+
+ElbowPlot(ref, ndims = 50, reduction = 'pca')
+ref = RunUMAP(ref, reduction = "pca", dims = 1:30, n.neighbors = 30, 
+              min.dist = 0.1, return.model = TRUE) 
+
+
+DimPlot(ref, reduction = "umap", 
+        group.by = "subtypes", label = TRUE,
+        repel = TRUE, raster=FALSE) 
+
+ref$labels = factor(ref$subtypes)
+
+# In data transfer, Seurat has an option (set by default) to project the PCA structure of a reference 
+# onto the query, instead of learning a joint structure with CCA. 
+# We generally suggest using this option when projecting data between scRNA-seq datasets.
+anchors <- FindTransferAnchors(reference = ref, 
+                               query = ax, 
+                               dims = 1:50,
+                               normalization.method = "LogNormalize",
+                               #reference.reduction = "pca.corrected",
+                               max.features = 200,
+                               k.anchor = 10,
+                               reduction = "cca" 
+)
+
+predictions <- TransferData(anchorset = anchors, refdata = ref$labels, 
+                            reference = ref,
+                            query = ax,
+                            weight.reduction = 'cca',
+                            dims = 1:50)
+
+saveRDS(anchors, file = paste0(RdataDir, '/cca_anchors_transferData.rds'))
+query = ax;
+query$predicted.id = predictions$predicted.id 
+query$predicted.score = predictions$predicted.id.score
+
+saveRDS(query, file = paste0(RdataDir, '/axolotl_macrophage_cca_anchors_transferData.rds'))
+
+jj = which(query$predicted.score < 0.5)
+query$predicted.id[jj] = NA
+
+
+p1 = DimPlot(query, reduction = "umap", 
+             group.by = "predicted.id", label = TRUE,
+             repel = TRUE, raster=FALSE) 
+
+p2 = FeaturePlot(query, features = 'predicted.score')
+
+p1 + p2
+
+ggsave(paste0(resDir, '/transfer_learning_seurat_cca.ref_v3.pdf'), 
+       width = 16, height = 8)
+
+
+
+
+
+## visualize the query cells alongside our reference and didn't work well
+## (MapQuery in Seurat didn't work well)
+# query <- Seurat::MapQuery(anchorset = anchors, 
+#                   reference = ref, 
+#                   query = aa,
+#                   refdata = list(labels = "labels"),
+#                   #refdata = list(celltype = "celltype"), 
+#                   transferdata.args = list(weight.reduction = 'rpca.ref'), 
+#                   reference.reduction = "pca", 
+#                   reduction.model = "umap")
+# 
+# p1 <- DimPlot(ref, reduction = "umap", group.by = "celltype", 
+#               label = TRUE, label.size = 3,
+#               repel = TRUE) + NoLegend() + ggtitle("Reference annotations")
+# p2 <- DimPlot(query, reduction = "ref.umap", group.by = "predicted.labels", 
+#               label = TRUE,
+#               label.size = 3, repel = TRUE) + NoLegend() + ggtitle("Query transferred labels")
+# p1 + p2
+
+
+##########################################
+# label transferring with   
+##########################################
+Test_reference_mapping_Symphony = FALSE
+if(Test_reference_mapping_Symphony){
+  library(symphony)
+  library(singlecellmethods)
+  source('/groups/tanaka/People/current/jiwang/projects/RA_competence/scripts/utils_symphony.R')
+  
+  fig.size <- function (height, width) {
+    options(repr.plot.height = height, repr.plot.width = width)
+  }
+  
+  # mapping_method = 'symphony_mapping'
+  # data_version = "mapping_mNT.noRA.RA.d2_d5_Marioni2019_selectedCelltypes"
+  # 
+  # outDir = paste0(resDir,  mapping_method, '/', data_version, '/')
+  # system(paste0('mkdir -p ', outDir))
+  
+  ## import and prepare the ref and query
+  #aa = readRDS(file = paste0(RdataDir, 
+  #                           'seuratObject_mNT_selectedCondition_downsampled.1k.perCondition_reclustered.rds'))
+  #ref = readRDS(file = paste0(RdataDir,  
+  #                            'seuratObject_EmbryoAtlasData_all36sample_RNAassay_keep.relevant.celltypes_v3.rds'))
+  
+  # features.common = intersect(rownames(aa), rownames(ref))
+  # aa = subset(aa, features = features.common)
+  # ref = subset(ref, features = features.common)
+  # 
+  # aa$dataset = 'mNT'
+  # aa$stage = aa$condition
+  # aa$sequencing.batch = 'mNT'
+  # ref$dataset = 'ref'
+  # aa$celltype = paste0('mNT_', aa$condition)
+  # 
+  # ref$labels = paste0(ref$celltype, '_', ref$stage)
+  
+  
+  #idx_query = which(metadata$donor == "5'") # use 5' dataset as the query
+  ref_exp_full = ref@assays$RNA@data
+  ref_metadata = ref@meta.data
+  query_exp = ax@assays$RNA@data
+  query_metadata = ax@meta.data
+  
+  # Sparse matrix with the normalized genes x cells matrix
+  ref_exp_full[1:5, 1:2]
+  
+  # Select variable genes and subset reference expression by variable genes
+  var_genes = vargenes_vst(ref_exp_full, groups = as.character(ref_metadata[['condition']]), topn = 500)
+  ref_exp = ref_exp_full[var_genes, ]
+  dim(ref_exp)
+  
+  # Build reference
+  reference = symphony::buildReference(
+    ref_exp,                   # reference expression (genes by cells)
+    ref_metadata,              # reference metadata (cells x attributes)
+    vars = NULL,         # variable(s) to integrate over
+    K = 100,                   # number of Harmony soft clusters
+    verbose = TRUE,            # display verbose output
+    do_umap = TRUE,            # run UMAP and save UMAP model to file
+    do_normalize = FALSE,      # perform log(CP10k) normalization on reference expression
+    vargenes_method = 'vst',   # variable gene selection method: 'vst' or 'mvp'
+    vargenes_groups = 'condition', # metadata column specifying groups for variable gene selection within each group
+    topn = 500,               # number of variable genes (per group)
+    theta = 2,                 # Harmony parameter(s) for diversity term
+    d = 20,                    # number of dimensions for PCA
+    save_uwot_path = '/groups/tanaka/People/current/jiwang/projects/fibroticRepair_axlotl_mouse/model_test/', # file path to save uwot UMAP model
+    additional_genes = NULL    # vector of any additional genes to force include
+  )
+  
+  #Run Harmony integration
+  Run_Harmony_integration = FALSE
+  if(Run_Harmony_integration){
+    # Calculate and save the mean and standard deviations for each gene
+    vargenes_means_sds = tibble(symbol = var_genes, mean = Matrix::rowMeans(ref_exp))
+    vargenes_means_sds$stddev = singlecellmethods::rowSDs(ref_exp,  row_means = vargenes_means_sds$mean)
+    head(vargenes_means_sds)
+    
+    #Scale data using calculated gene means and standard deviations
+    ref_exp_scaled = singlecellmethods::scaleDataWithStats(ref_exp, vargenes_means_sds$mean, 
+                                                           vargenes_means_sds$stddev, 1)
+    
+    #Run SVD, save gene loadings (s$u)
+    set.seed(0)
+    s = irlba::irlba(ref_exp_scaled, nv = 20)
+    Z_pca_ref = diag(s$d) %*% t(s$v) # [pcs by cells]
+    loadings = s$u
+    
+    set.seed(0)
+    ref_harmObj = harmony::HarmonyMatrix(
+      data_mat = t(Z_pca_ref),  ## PCA embedding matrix of cells
+      meta_data = ref_metadata, ## dataframe with cell labels
+      theta = c(2),             ## cluster diversity enforcement
+      vars_use = NULL,    ## variable to integrate out
+      nclust = NULL,             ## number of clusters in Harmony model
+      max.iter.harmony = 20,
+      return_object = TRUE,     ## return the full Harmony model object
+      do_pca = FALSE            ## don't recompute PCs
+    )
+    
+    # To run the next function buildReferenceFromHarmonyObj(), 
+    # you need to input the saved gene loadings (loadings) and vargenes_means_sds.
+    # Compress a Harmony object into a Symphony reference
+    reference = symphony::buildReferenceFromHarmonyObj(
+      ref_harmObj,            # output object from HarmonyMatrix()
+      ref_metadata,           # reference cell metadata
+      vargenes_means_sds,     # gene names, means, and std devs for scaling
+      loadings,               # genes x PCs matrix
+      verbose = TRUE,         # verbose output
+      do_umap = TRUE,         # Set to TRUE only when UMAP model was saved for reference
+      save_uwot_path = '/groups/tanaka/People/current/jiwang/projects/RA_competence/results/scRNAseq_R13547_10x_mNT_20220813/mapping_to_MouseGastrulationData/symphony_mapping/mapping_mNT.noRA.RA.d2_d5_Marioni2019_selectedCelltypes/model_test')
+    
+  }
+  
+  # Optionally, you can specify which normalization method was
+  # used to build the reference as a custom slot inside the Symphony object to 
+  # help record this information for future query users
+  #reference$normalization_method = 'log(CP10k+1)'
+  saveRDS(reference, paste0(outDir, 'testing_reference_mouseGastrulation_1.rds'))
+  
+  str(reference)
+  
+  # The harmonized embedding is located in the Z_corr slot of the reference object.
+  dim(reference$Z_corr)
+  reference$Z_corr[1:5, 1:5]
+  
+  # reference = readRDS(paste0(outDir, 'testing_reference1.rds'))
+  umap_labels = cbind(ref_metadata, reference$umap$embedding)
+  
+  fig.size(3, 5)
+  plotBasic(umap_labels, title = 'Reference', color.by = 'subtypes')
+  
+  # In order to map a new query dataset onto the reference, 
+  # you will need a reference object saved from the steps above, 
+  # as well as query cell expression and metadata.
+  # Map query
+  query = mapQuery(query_exp,             # query gene expression (genes x cells)
+                   query_metadata,        # query metadata (cells x attributes)
+                   reference,             # Symphony reference object
+                   do_normalize = FALSE,  # perform log(CP10k+1) normalization on query
+                   do_umap = TRUE)        # project query cells into reference UMAP
+  
+  ## Symphony assumes that the query is normalized in the same manner as the reference. 
+  # Our implementation currently uses log(CP10k) normalization.
+  
+  str(query)
+  
+  #Let's take a look at what the query object contains:
+  
+  # Z: query cells in reference Harmonized embedding
+  #Zq_pca: query cells in pre-Harmony reference PC embedding (prior to correction)
+  # R: query cell soft cluster assignments
+  #  Xq: query cell design matrix for correction step
+  #  umap: query cells projected into reference UMAP coordinates (using uwot)
+  #  meta_data: metadata
+  # Predict query cell types using k-NN
+  query = knnPredict(query, reference, reference$meta_data$subtypes, k = 5)
+  
+  ## Query cell type predictions are now in the cell_type_pred_knn column. 
+  ## The cell_type_pred_knn_prob column reports the proportion of nearest neighbors with the winning vote 
+  # (can help identify query cells that fall "on the border" between 2 reference cell types).
+  
+  head(query$meta_data)
+  
+  # Add the UMAP coordinates to the metadata
+  reference$meta_data$cell_type_pred_knn = NA
+  reference$meta_data$cell_type_pred_knn_prob = NA
+  reference$meta_data$ref_query = 'reference'
+  query$meta_data$ref_query = 'query'
+  
+  # Add the UMAP coordinates to the metadata
+  umap_combined = rbind(query$umap, reference$umap$embedding)
+  xx = query$meta_data[, c(24, 22)]
+  colnames(xx)[2] = 'celltype' 
+  meta_data_combined = rbind(xx, reference$meta_data[, c(27, 18)])
+  
+  umap_combined_labels = cbind(meta_data_combined, umap_combined)
+  
+  fig.size(6, 14)
+  plotBasic(umap_combined_labels, title = 'Reference and query cells', 
+            color.by = 'celltype', facet.by = 'ref_query')
+  
+  ggsave(paste0(outDir, '/mapping_symphony_ref_v1_celltype_coembedding.pdf'), 
+         width = 16, height = 8)
+  
+  ax$predicted.id = query$meta_data$cell_type_pred_knn
+  ax$predicted.score = query$meta_data$cell_type_pred_knn_prob
+  
+  p2 = FeaturePlot(ax, features = 'predicted.score')
+  
+
+  p1 = DimPlot(ax, reduction = "umap", 
+               group.by = "predicted.id", label = TRUE,
+               repel = TRUE, raster=FALSE) 
+  
+  p1 + p2
+  
+  
+  jj = which(ax$predicted.score < 0.5)
+  ax$predicted.id[jj] = NA
+  
+  p1 = DimPlot(ax, reduction = "umap", 
+               group.by = "predicted.id", label = TRUE,
+               repel = TRUE, raster=FALSE) 
+  
+  p1 + p2
+  
+  
+  
+  plot(p1)
+  ggsave(paste0(outDir, '/mapping_symphony_ref_celltype_v1.pdf'), 
+         width = 16, height = 8)
   
   
 }
@@ -282,7 +737,7 @@ mm <- CreateSeuratObject(counts=counts_mm, assay = 'RNA', meta.data = metadata_m
 
 aa = merge(mm, ax)
 
-saveFile = paste0(resDir, 'mm_ax_scRNAseq_merged_seuratV4.h5Seurat')
+saveFile = paste0(resDir, 'mm_ax_scRNAseq_merged_v2_seuratV4.h5Seurat')
 SaveH5Seurat(aa, filename = saveFile, overwrite = TRUE)
 Convert(saveFile, dest = "h5ad", overwrite = TRUE)
 
@@ -319,19 +774,29 @@ source(paste0(functionDir, 'functions_cccInference.R'))
 ##########################################
 # load ax and mm data and process them 
 ##########################################
-ax = readRDS(file = paste0(RdataDir, 'axoltol_limbBlatema_batch1_macrophage_subtypes.rds'))
-mm = readRDS(file = paste0(RdataDir, 'mouse_skin_macrophage_subtypes.rds'))
+mm = readRDS(file = paste0(RdataDir, 'mm_scRNAseq_for_crossSpecies_v3.rds'))
+ax = readRDS(file = paste0(RdataDir, 'ax_scRNAseq_for_crossSpecies_v3.rds'))
+mm <- FindVariableFeatures(mm, selection.method = "vst", nfeatures = 3000) # find subset-specific HVGs
+mm <- ScaleData(mm)
+mm <- RunPCA(mm, verbose = FALSE, weight.by.var = FALSE)
 
-mm = subset(mm, cells = colnames(mm)[which(!is.na(mm$subtypes))])
+ax <- FindVariableFeatures(ax, selection.method = "vst", nfeatures = 5000) # find subset-specific HVGs
+ax <- ScaleData(ax)
+ax <- RunPCA(ax, verbose = FALSE, weight.by.var = FALSE)
+#ax = readRDS(file = paste0(RdataDir, 'axoltol_limbBlatema_batch1_macrophage_subtypes.rds'))
+#mm = readRDS(file = paste0(RdataDir, 'mouse_skin_macrophage_subtypes.rds'))
+#mm = subset(mm, cells = colnames(mm)[which(!is.na(mm$subtypes))])
 
-ax$species = 'ax'
-ax$time = droplevels(ax$time)
-ax$subtypes[which(ax$subtypes == 'cycling')] = 'cycling.ax'
+ax$subtypes = ax$cluster
+
+#ax$species = 'ax'
+#ax$time = droplevels(ax$time)
+#ax$subtypes[which(ax$subtypes == 'cycling')] = 'cycling.ax'
 
 ax = as.SingleCellExperiment(ax, assay = 'RNA')
 
-mm$species = 'mm'
-mm$subtypes[which(mm$subtypes == 'cycling')] = 'cycling.mm'
+#mm$species = 'mm'
+#mm$subtypes[which(mm$subtypes == 'cycling')] = 'cycling.mm'
 mm = as.SingleCellExperiment(mm, assay = 'RNA')
 
 ##########################################
@@ -364,9 +829,9 @@ if(reLoad_computated_r_milo_m_miol)
   # Compute rabbit neighbourhoods
   a_milo <- Milo(ax)
   
-  a_milo <- buildGraph(a_milo, k=30, d=50, reduced.dim="PCA")
+  a_milo <- buildGraph(a_milo, k=20, d=30, reduced.dim="PCA")
   
-  a_milo <- makeNhoods(a_milo, prop=0.05, k=30, d=50, refined=T, reduced_dims="PCA")
+  a_milo <- makeNhoods(a_milo, prop=0.1, k=21, d=30, refined=T, reduced_dims="PCA")
   
   a_milo <- buildNhoodGraph(a_milo)
   
@@ -422,7 +887,7 @@ head(rowData(n_milo))
 
 # Add mouse colData
 head(colData(a_milo))
-
+head(a_milo$subtypes)
 
 head(colData(n_milo))
 #table(r_milo$somite_count)
@@ -437,7 +902,7 @@ out <- scrabbitr::calcNhoodSim(a_milo, n_milo, an_orthologs,
                                sim_preprocessing="gene_spec", 
                                sim_measure="pearson",
                                hvg_join_type="intersection", 
-                               max_hvgs=3000, 
+                               max_hvgs=5000, 
                                #r_exclude = r_exclude, 
                                #m_exclude = m_exclude,
                                export_dir = resDir, 
@@ -536,7 +1001,7 @@ p_all <- plotTrajMappings(a_milo, n_milo, df_simFilt,
 
 p_all
 
-ggsave(paste0(resDir, "axolotl_nm_mapping_test_v10.pdf"), width=18, height=10, dpi=300)
+ggsave(paste0(resDir, "axolotl_nm_mapping_test_v11.pdf"), width=18, height=10, dpi=300)
 
 
 ########################################################
@@ -546,23 +1011,54 @@ ggsave(paste0(resDir, "axolotl_nm_mapping_test_v10.pdf"), width=18, height=10, d
 # Tomas and Ashley's paper
 ########################################################
 ########################################################
-ax = readRDS(file = paste0(RdataDir, 'axoltol_limbBlatema_batch1_macrophage_subtypes.rds'))
-mm = readRDS(file = paste0(RdataDir, 'mouse_skin_macrophage_subtypes.rds'))
+mm = readRDS(file = paste0(RdataDir, 'mm_scRNAseq_for_crossSpecies_v3.rds'))
+ax = readRDS(file = paste0(RdataDir, 'ax_scRNAseq_for_crossSpecies_v3.rds'))
+#saveRDS(aa, file = paste0(RdataDir, 'mm_ax_scRNAseq_for_crossSpecies_v3.rds'))
 
-ax$species = 'ax'
-ax$time = droplevels(ax$time)
-ax$subtypes[which(ax$subtypes == 'cycling')] = 'cycling.ax'
+p1 = DimPlot(mm, group.by = 'subtypes', label = TRUE, repel =  TRUE)
+p2 = DimPlot(ax, group.by = 'cluster', label = TRUE, repel =  TRUE)
 
-mm$species = 'mm'
-mm$subtypes[which(mm$subtypes == 'cycling')] = 'cycling.mm'
+p1 + p2
+
+ggsave(filename = paste0(resDir, '/cross_species_macrophageData_mm_ax_v3.pdf'), 
+       width = 16, height = 6)
+
+cols_cluster = c( "#7F7F7F", "#FFC000", "#70AD47", "#337f01", "#265401", "#CD00CF", "#800080", 
+                  "#EFFAB6", "#69C6BE", "#007BB7", "#121D60",
+                  "#69C6BE", "#007BB7", "#121D60")
+
+cols_macrophage = c("#EFFAB6", "#70AD47", "#69C6BE", "#007BB7", 'royalblue')
+
+DimPlot(ax, group.by = 'cluster', label = TRUE, repel =  TRUE) + 
+  #theme_classic() +
+  theme(axis.text.x = element_text(angle = 0, size = 14, vjust = 0.4),
+        axis.text.y = element_text(angle = 0, size = 14)) +
+  scale_color_manual(values=cols_macrophage)
+
+ggsave(filename = paste0(resDir, '/axolotl_macrophage_subtypes_v3.pdf'), 
+       width = 6, height = 4)
+
+
+
+
+
+
+
 
 ##########################################
 # find all DE genes for axolotl and mouse
 ##########################################
-Idents(ax) = ax$subtypes
+Idents(ax) = ax$cluster
 Idents(mm) = mm$subtypes
-markers.ax = FindAllMarkers(ax, logfc.threshold = 0.5, min.pct = 0.1)
-markers.mm = FindAllMarkers(mm, logfc.threshold = 0.5, min.pct = 0.1)
+markers.ax = FindAllMarkers(ax, logfc.threshold = 0.25, min.pct = 0.1)
+
+cat(length(unique(markers.ax$gene)), ' markers found in ax\n')
+#markers.mm = FindAllMarkers(mm, logfc.threshold = 0.5, min.pct = 0.1)
+#saveRDS(markers.mm, file = paste0(RdataDir, 'mm_scRNAseq_for_crossSpecies_v3_markersAll.rds'))
+markers.mm = readRDS(file = paste0(RdataDir, 'mm_scRNAseq_for_crossSpecies_v3_markersAll.rds'))
+
+cat(length(unique(markers.mm$gene)), ' markers found in mm\n')
+
 
 ## define the one-on-one ortholog between axololt and mice
 an_orthologs = data.frame(ref = rownames(ax), query = rownames(ax))
@@ -595,16 +1091,17 @@ kk = intersect(which(!is.na(mm1)), which(!is.na(mm2)))
 an_orthologs = an_orthologs[kk, ]
 
 an_orthologs$tfs = FALSE
-an_orthologs$tfs[which(!is.na(match(toupper(an_orthologs$query), c(tfs))))] = TRUE
+an_orthologs$tfs[which(!is.na(match(toupper(an_orthologs$query), c(tfs, sps))))] = TRUE
 
-avg.ax = AggregateExpression(ax, features = an_orthologs$ref[which(an_orthologs$tfs == TRUE)], 
-                             normalization.method = "LogNormalize",
-                             scale.factor = 10000)
+avg.ax = AggregateExpression(ax, features = an_orthologs$ref[which(an_orthologs$tfs == TRUE)])
 avg.ax = data.frame(avg.ax$RNA)
+
+cat(nrow(avg.ax), 'TFs used for correlation analysis\n')
 
 avg.mm = AggregateExpression(mm, features = an_orthologs$query[which(an_orthologs$tfs == TRUE)])
 avg.mm = data.frame(avg.mm$RNA)
 
+cat(nrow(avg.mm), 'TFs used for correlation analysis\n')
 
 cort = psych::corr.test(avg.ax, avg.mm, method = "spearman", 
                         adjust = "fdr", alpha = 0.05, ci = F)
@@ -646,7 +1143,9 @@ br = seq((min(cort$r)), max(abs(cort$r)), length.out = 101)
 cols = cols[!(br>max(cort$r) | br<min(cort$r))]
 
 ggplot()+
-  geom_point(data = plot_df, mapping = aes(x = Var2, y = Var1, fill = expression), 
+  geom_point(data = plot_df, mapping = aes(x = Var2, 
+                                           y = factor(Var1, levels = c('M3', 'M5', 'M1', 'M2', 'M4')), 
+                                                                fill = value), 
              shape = 21, size = 10) +
   #geom_point(data = plot_df[plot_df$rowmax,], mapping = aes(x = Var2, y = Var1, size = 30), 
   #           shape = "—", show.legend = F, colour = "grey10")+
@@ -659,12 +1158,12 @@ ggplot()+
                        colours = cols) +
   labs(x = 'mouse', y = 'axolotl', fill = "Spearman's\nrho", size = "-log10\nadj. p-value")+
   theme_classic()+
-  theme(axis.title = element_text(colour = "black", face = "bold"),
-        axis.text = element_text(colour = "black"),
-        axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0),
-        legend.title = element_text(size = 9),
-        legend.text = element_text(size = 8))
+  theme(axis.title = element_text(colour = "black", face = "bold", size = 14),
+        axis.text = element_text(colour = "black", size = 12),
+        axis.text.x = element_text(angle = 45, hjust = 1.0, vjust = 1.0),
+        legend.title = element_text(size = 10),
+        legend.text = element_text(size = 10))
 
-ggsave(paste0(resDir, "axolotl_nm_subtype_correlationAnalysis.pdf"), width=8, height=6, dpi=300)
+ggsave(paste0(resDir, "axolotl_nm_subtype_correlationAnalysis_v2.pdf"), width=8, height=6, dpi=300)
 
 
