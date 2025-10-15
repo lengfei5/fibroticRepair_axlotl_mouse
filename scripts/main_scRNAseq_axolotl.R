@@ -1038,13 +1038,13 @@ ggsave(filename = paste0(resDir, '/Tobie_batch1Data_axloltolBlastema_FB_M_others
 saveRDS(aa, file = paste0(RdataDir, 
               '/axoltol_limbBlatema_batch1_DFout_filterCelltypes_FBcleaned._Mphg.cleaned_subtypes_v3.rds'))
 
-
 ##########################################
 # make plot of temporal changes
 ##########################################
 subs = readRDS(file = paste0(RdataDir, 
                              '/axoltol_limbBlatema_batch1_FB_time_subtypeAnnotations_v3.rds'))
-pct = table(subs$subtypes, subs$time)
+
+pct = table(subs$cluster, subs$time)
 for(n in 1:ncol(pct)) pct[,n] = pct[,n]/sum(pct[,n])
 pct = data.frame(pct)
 df = pct 
@@ -1089,6 +1089,177 @@ DotPlot(subs, features = genes, group.by = 'cluster') + RotatedAxis() +
 
 ggsave(filename = paste0(resDir, '/axloltol_Blastema_FB_subclusters_markers.pdf'), 
        width = 12, height = 6)
+
+
+########################################################
+########################################################
+# Section : # make plots for grant figures 
+# 
+########################################################
+########################################################
+
+##########################################
+
+##########################################
+ax = readRDS(file = paste0(RdataDir, 
+                           '/axoltol_limbBlatema_batch1_macrophage_time_subtypeAnnotations_rmEpidermis_v3.rds'))
+
+#ax[["RNA"]] <- as(object = ax[["RNA5"]], Class = "Assay")
+
+ax$species = 'ax'
+ax$time = droplevels(ax$time)
+
+p1 = DimPlot(ax, group.by = 'cluster', label = TRUE, repel =  TRUE)
+p2 = DimPlot(ax, group.by = 'subtypes', label = TRUE, repel =  TRUE) + NoLegend()
+p1 + p2
+
+ax$cluster[which(ax$subtypes == "M0.CXCR4.TLR5.pro-inflammatory")] = 'M1'
+
+ax$cluster[which(ax$subtypes == "M1.APOE.PPARG.anti-inflammatory" & ax$cluster == 'M1')] = 'M2' 
+ax$cluster[which(ax$subtypes == "M3.CXCR1.DYSF.pro-inflammatory")] = 'M3' 
+ax$cluster[which(ax$subtypes == "M7.CTSK+.TREML1+.MARCO.low")] = 'M4'
+ax$cluster[which(ax$subtypes == "M4.ARG1-.CSF1R-.MPEG1-")] = 'M5' 
+ax$cluster[which(ax$subtypes == "M1.APOE.PPARG.anti-inflammatory" & ax$cluster == 'M6')] = 'M6.cyling' 
+
+#ax$subtypes[which(ax$subtypes == 'cycling')] = 'cycling.ax'
+jj = which(ax$cluster == 'M6.cyling')
+ax$cluster[jj] = 'M2'
+ax$subtypes[jj] = 'M1.APOE.PPARG.anti-inflammatory'
+
+DimPlot(ax, group.by = 'cluster', label = TRUE, repel = TRUE)
+
+cols_macrophage = c( "#265a88", "#8BBEDC",  '#A4DFF2', '#25aff5', "#007BB7")
+
+DimPlot(ax, group.by = 'cluster', label = TRUE, repel =  TRUE) + 
+  #theme_classic() +
+  theme(axis.text.x = element_text(angle = 0, size = 14, vjust = 0.4),
+        axis.text.y = element_text(angle = 0, size = 14)) +
+  scale_color_manual(values=cols_macrophage) + NoLegend() +
+  ggtitle('')
+
+ggsave(filename = paste0(resDir, '/axolotl_macrophage_subtypes_v3.pdf'), 
+       width = 5, height = 4)
+
+
+aa = readRDS(file = paste0(RdataDir, 
+              '/axoltol_limbBlatema_batch1_DFout_filterCelltypes_FBcleaned._Mphg.cleaned_subtypes_v3.rds'))
+
+
+jj = match(colnames(ax), colnames(aa))
+aa$cluster[jj] = ax$cluster
+
+"#12400c", "#2d6624","#1d4f15", "#174711", "#2d6624", "#3d7f33", "#3b7b30", "#468b3b", "#4f9843","#5dae50", "#66bb58", "#72cd64", "#306a26", "#78d669", "#81e472"
+
+#gaba
+"#700209", "#75090e","#7a0f13", "#801517", "#851a1b", "#8a1f1f", "#902423", "#952927", "#9a2d2c","#a03230", "#a53634", "#aa3a39", "#b03f3d","#b54342", "#ba4846", "#c04c4b", "#c5504f", "#ca5554", "#d05959", "#d55e5e","#73050c", "#780c11","#8d2221", "#982b2a","#a23432", "#a83837", "#b2413f", "#b84544", "#bd4a49", "#c85352", #"#cd5756",
+#glut
+"#054674", "#134d7b","#1d5481", "#265a88", "#2e618e", "#73a4cb", "#366995", "#3e709c", "#4677a2","#4d7ea9", "#5586b0", "#5c8db7", "#6495bd","#6b9cc4", "#7bacd2", "#8ebfe4", "#96c7eb", "#9ecff2", "#18507e", "#18507e","#2a5e8b", "#497ba6","#5889b3", "#6fa0c8","#7fafd6", "#6091ba", "#5182ac", "#3a6c98", "#a6d7f9",
+#npc
+"#ffb120", "#feb72a","#fdbc34", "#fcc13d", "#fbc745", "#facc4e", "#f9d156", "#f8d65f", "#f8da68","#f7df70", "#f7e479", "#f7e882", "#f7ed8a", "#f7f193", "#eca319"
+
+my_cols <- c('3'='#F68282','15'='#31C53F','5'='#1FA195','1'='#B95FBB','13'='#D4D915',
+             '14'='#28CECA','9'='#ff9a36','8'='#2FF18B','11'='#aeadb3','6'='#faf4cf',
+             '2'='#CCB1F1','12'='#25aff5','7'='#A4DFF2','4'='#4B4BF7','16'='#AC8F14',
+             '10'='#E6C122')
+'11'='#aeadb3','6'='#faf4cf',
+'2'='#CCB1F1','12'='#25aff5')
+
+"#EDF8E9" "#C4E8BD" "#90D08E" "#59B668" "#27984B" "#006D2C"
+"#EDF8E9" "#BAE4B3" "#74C476" "#31A354" "#006D2C"
+
+
+cols = c('#F68282','#31C53F','#1FA195','#B95FBB','#D4D915',
+         '#28CECA', '#ff9a36', '#2FF18B')
+
+cols_cluster = c( "#7F7F7F", "#FFC000", "#70AD47", "#337f01", "#265401", "#CD00CF", "#800080", 
+                  "#EFFAB6", "#69C6BE", "#007BB7", "#121D60",
+                  "#69C6BE", "#007BB7", "#121D60")
+
+
+
+
+cols_macrophage = c( "#265a88", "#8BBEDC",  '#A4DFF2', '#25aff5', "#007BB7")
+cols_FB = c("#EFFAB6","#BAE4B3", "#69C6BE", '#2FF18B', '#31C53F')
+
+cols_cluster = c("#12400c", "#952927", "#800080",'#F68282', cols_FB, cols_macrophage, 
+                 "#FFC000", '#CCB1F1', "#CD00CF") 
+
+DimPlot(aa, group.by = 'cluster', label = TRUE, repel = TRUE) + NoLegend() + 
+  theme(axis.text.x = element_text(angle = 0, size = 14, vjust = 0.4),
+        axis.text.y = element_text(angle = 0, size = 14)) + 
+  ggtitle('') + 
+  scale_color_manual(values=cols_cluster)
+
+ggsave(filename = paste0(resDir, '/axolotl_all_celltypes_v4.pdf'), 
+       width = 6, height = 5)
+  
+
+
+### FB temporal changes
+subs = readRDS(file = paste0(RdataDir, 
+                             '/axoltol_limbBlatema_batch1_FB_time_subtypeAnnotations_v3.rds'))
+
+pct = table(subs$cluster, subs$time)
+for(n in 1:ncol(pct)) pct[,n] = pct[,n]/sum(pct[,n])
+pct = data.frame(pct)
+df = pct 
+colnames(df) = c('cluster', 'condition', 'pct')
+
+ggplot(df, aes(x = condition, y = pct)) +
+  geom_bar(stat = 'identity', aes(fill = cluster)) +
+  
+  ylab("% of cluster ") + 
+  xlab("") + 
+  #ylim(0, 1.2) + 
+  theme_classic() +  
+  theme(axis.text.x = element_text(angle = 45, size = 14, vjust = 0.4),
+        axis.text.y = element_text(angle = 0, size = 14)) +
+  theme(legend.key = element_blank()) + 
+  theme(plot.margin=unit(c(1,3,1,1),"cm"))+
+  #theme(legend.position = c(0.8,.9), legend.direction = "vertical") +
+  theme(legend.title = element_blank(), 
+        legend.text = element_text(size = 10)) +
+  scale_fill_manual(values = cols_FB)
+
+#scale_fill_manual(values=c("#054674", '#25aff5', "#4d7ea9", '#D4D915','#ff9a36','#B95FBB'))
+#'#31C53F', "darkgreen", "darkorange", "red", 'magenta', 'gray', 'green', 'blue', 'black')) 
+
+ggsave(filename = paste0(resDir, '/axloltol_FB_subclusters_proportions.pdf'), 
+       width = 6, height = 4)
+
+
+### check the pro-fibrotic macrophage activation
+genes = c(rownames(ax)[grep('CLEC10A|NINJ1|TREM2|FABP5|GPNMB|IGF1-|MS4A7|GAS6', 
+                            rownames(ax))], "SPP1-AMEX60DD043905")
+
+FeaturePlot(ax, features = genes, ncol = 3, pt.size = 0.8) &
+  scale_color_gradient(low = "grey", high = "brown") 
+
+ggsave(filename = paste0(resDir, '/axoltol_macrophage_proFibrotic_genes.pdf'), 
+       width = 10, height = 6)
+
+
+genes = c(rownames(ax)[grep('CLEC10A|NINJ1|TREM2|FABP5|GPNMB|IGF1-|MS4A7|GAS6', 
+                            rownames(ax))], "SPP1-AMEX60DD043905")
+
+FeaturePlot(ax, features = genes, ncol = 3, pt.size = 0.8) &
+  scale_color_gradient(low = "grey", high = "brown") 
+
+ggsave(filename = paste0(resDir, '/axoltol_macrophage_proFibrotic_genes.pdf'), 
+       width = 10, height = 6)
+
+
+
+FeaturePlot(ax, features = c("MAFB-AMEX60DD028613", "LYVE1-AMEX60DD004804")) &
+  #scale_color_viridis_c()
+  scale_color_gradient(low = "grey", high = "brown") 
+
+ggsave(filename = paste0(resDir, '/axoltol_macrophage_MAF.pdf'), 
+       width = 10, height = 4)
+
+
+
+
 
 
 ########################################################

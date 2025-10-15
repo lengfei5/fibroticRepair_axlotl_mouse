@@ -620,6 +620,11 @@ DimPlot(sd, group.by = 'cell_type_fine', label = TRUE, repel = TRUE)
 
 DimPlot(sd, group.by = 'nn_cell', label = TRUE, repel = TRUE)
 
+kk = sd$seurat_clusters[which(sd$cell_type_coarse=='Stroma' & sd$nn_cell != 'Glial cell' & sd$nn_cell != 'Myocyte')]
+
+
+                              
+
 ggsave(filename = paste0(resDir, '/mouseSkin_WT_subtypes_annotation_v1.pdf'), 
        width = 12, height = 8)
 
