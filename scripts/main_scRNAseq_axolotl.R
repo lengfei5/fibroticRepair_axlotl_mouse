@@ -1258,6 +1258,56 @@ ggsave(filename = paste0(resDir, '/axoltol_macrophage_MAF.pdf'),
        width = 10, height = 4)
 
 
+##########################################
+# plot for cross-species with scVI 
+##########################################
+library(Seurat)
+library(SeuratData)
+library(SeuratDisk)
+mm = readRDS(file = paste0(RdataDir, 'mm_scRNAseq_for_crossSpecies_v3.rds'))
+ax = readRDS(file = paste0(RdataDir, 'ax_scRNAseq_for_crossSpecies_v3.rds'))
+
+aa = merge(mm, y = ax)
+
+saveRDS(aa, file = paste0(RdataDir, 'SeuratObj_mm_ax_scRNAseq_merged_v2_seuratV4.rds'))
+
+# Convert(paste0("../results/scRNAseq_analysis_immune_crossSpecies_20250903/",
+#                "mm_ax_scRNAseq_merged_v2_seuratV4_analysis_output.h5ad"), dest = "h5seurat", 
+#         overwrite = TRUE)
+# pbmc3k <- LoadH5Seurat("pbmc3k_final.h5seurat")
+# pbmc3k
+
+embedding = read.csv(file = paste0('../results/scRNAseq_analysis_immune_crossSpecies_20250903/', 
+                                   'mm_ax_scRNAseq_merged_v2_seuratV4_analysis_output_umap_coordinates.csv'),
+                     row.names = c(1))
+
+embedding = as.matrix(embedding)
+mm = match(colnames(aa), rownames(embedding))
+
+
+aa[['umap']] = Seurat::CreateDimReducObject(embeddings=embedding, assay = 'RNA', key = 'UMAP_')
+
+kk = which(aa$cluster == 'M4')
+aa$species[kk] = 'ax_M4'
+
+
+"#facc4e", "#f9d156", "#f8d65f", "#f8da68","#f7df70", "#f7e479", "#f7e882", "#f7ed8a", "#f7f193", "#eca319"
+
+cols_macrophage = c("#265a88", "#8BBEDC",  '#A4DFF2', '#25aff5', "#007BB7")
+
+DimPlot(aa, group.by = 'species') + 
+  scale_color_manual(values=c("#265a88", '#25aff5',  '#ff9a36'))
+
+ggsave(filename = paste0(resDir, '/axolotl_mm_crossSpecies_scVI_v2.pdf'), 
+       width = 6, height = 4)
+
+
+
+
+##########################################
+# FB annotation comparison between axolotl and mouse 
+##########################################
+library(ggalluvial)
 
 
 

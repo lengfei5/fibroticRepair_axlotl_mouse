@@ -620,10 +620,26 @@ DimPlot(sd, group.by = 'cell_type_fine', label = TRUE, repel = TRUE)
 
 DimPlot(sd, group.by = 'nn_cell', label = TRUE, repel = TRUE)
 
-kk = sd$seurat_clusters[which(sd$cell_type_coarse=='Stroma' & sd$nn_cell != 'Glial cell' & sd$nn_cell != 'Myocyte')]
+kk = which(sd$cell_type_coarse=='Stroma' & sd$nn_cell != 'Glial cell' & sd$nn_cell != 'Myocyte')
 
+mm = subset(sd, cells = colnames(sd)[kk])
+mm$seurat_clusters = droplevels(mm$seurat_clusters)
 
-                              
+mm$cluster = NA
+mm$cluster[which(mm$seurat_clusters == '0')] = 'F1'
+mm$cluster[which(mm$seurat_clusters == '3')] = 'F2'
+mm$cluster[which(mm$seurat_clusters == '1')] = 'F3'
+mm$cluster[which(mm$seurat_clusters == '5')] = 'F4'
+mm$cluster[which(mm$seurat_clusters == '10')] = 'F5'
+mm$cluster[which(mm$seurat_clusters == '7')] = 'F6'
+mm$cluster[which(mm$seurat_clusters == '15')] = 'F7'
+mm$cluster[which(mm$seurat_clusters == '16')] = 'F8'
+mm$cluster[which(mm$seurat_clusters == '9')] = 'F9'
+
+DimPlot(mm, group.by = 'cluster', label = TRUE, repel = TRUE)
+
+saveRDS(mm, file = paste0(RdataDir, 'mouseSkin_WT_FBsubtypes.rds'))
+
 
 ggsave(filename = paste0(resDir, '/mouseSkin_WT_subtypes_annotation_v1.pdf'), 
        width = 12, height = 8)
