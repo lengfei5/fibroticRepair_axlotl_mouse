@@ -1223,9 +1223,10 @@ ggplot(df, aes(x = condition, y = pct)) +
 
 #scale_fill_manual(values=c("#054674", '#25aff5', "#4d7ea9", '#D4D915','#ff9a36','#B95FBB'))
 #'#31C53F', "darkgreen", "darkorange", "red", 'magenta', 'gray', 'green', 'blue', 'black')) 
-
 ggsave(filename = paste0(resDir, '/axloltol_FB_subclusters_proportions.pdf'), 
        width = 6, height = 4)
+
+
 
 
 ### check the pro-fibrotic macrophage activation
