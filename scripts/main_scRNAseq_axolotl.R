@@ -174,6 +174,18 @@ saveRDS(aa, file = paste0(RdataDir,
                           '/axoltol_limb_Blatema_twoBacthes_harmonyMerged_fromTobi_',
                           'filterCelltypes_geneNames.rds'))
 
+
+
+##########################################
+# double check some marker genes of RUNX for Elly 
+##########################################
+aa = readRDS(paste0(RdataDir, 
+                    '/axoltol_limb_Blatema_twoBacthes_harmonyMerged_fromTobi_',
+                    'filterCelltypes_geneNames.rds'))
+
+
+
+
 ##########################################
 # subset batch 1 day3, 8, 11 
 ##########################################
@@ -1227,7 +1239,22 @@ ggsave(filename = paste0(resDir, '/axloltol_FB_subclusters_proportions.pdf'),
        width = 6, height = 4)
 
 
+### plots new marker genes in FB
+subs = readRDS(file = paste0(RdataDir, 
+                             '/axoltol_limbBlatema_batch1_FB_time_subtypeAnnotations_v3.rds'))
 
+p1 = DimPlot(subs, group.by = 'cluster', label = TRUE, repel = TRUE, label.size = 5) +
+  NoLegend()
+
+##  Crabp1, Twist2, Lrg1
+genes = c(rownames(subs)[grep('CRABP1|^LRG1|ACTA2', rownames(subs))], "TWIST2-AMEX60DD029436")
+p2 = FeaturePlot(subs, features = genes, ncol = 2, pt.size = 0.8) &
+  scale_color_gradient(low = "grey", high = "brown") 
+
+p1 + p2
+
+ggsave(filename = paste0(resDir, '/axoltol_FB_newMarkers_genes.pdf'), 
+       width = 12, height = 6)
 
 ### check the pro-fibrotic macrophage activation
 genes = c(rownames(ax)[grep('CLEC10A|NINJ1|TREM2|FABP5|GPNMB|IGF1-|MS4A7|GAS6', 
