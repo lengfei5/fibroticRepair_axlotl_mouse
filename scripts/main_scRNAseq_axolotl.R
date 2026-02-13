@@ -2,7 +2,7 @@
 ##########################################################################
 # Project: Collaboration with Sabine and Sebastian from Cologne
 # Script purpose: analyze macrophage subtypes from Natasya's data
-# Usage example: 
+# Usage example: This script is running Seurat_5.0.2 in R v4.3.0
 # Author: Jingkui Wang (jingkui.wang@imp.ac.at)
 # Date of creation: Fri Jan 13 11:01:15 2023
 ##########################################################################
@@ -183,8 +183,25 @@ aa = readRDS(paste0(RdataDir,
                     '/axoltol_limb_Blatema_twoBacthes_harmonyMerged_fromTobi_',
                     'filterCelltypes_geneNames.rds'))
 
+aa = NormalizeData(aa, normalization.method = "LogNormalize", scale.factor = 10000)
+aa <- FindVariableFeatures(aa, selection.method = "vst", nfeatures = 8000) # find subset-specific HVGs
 
+aa <- ScaleData(aa)
 
+genes = c(rownames(aa)[grep('RUNX1-|CBFB|ZEB1|SNAI', rownames(aa))])
+
+FeaturePlot(aa, features = genes)
+
+p1 = DimPlot(aa, group.by = 'celltype', label = TRUE, repel = TRUE) + NoLegend()
+p11 = DimPlot(aa, group.by = 'time', label = TRUE, repel = TRUE) 
+p2 = FeaturePlot(aa, features = genes)
+
+(p1/p11) + p2 
+
+ggsave(filename = paste0(resDir, '/Tobie_umap.harmony_axloltol_BL_celltypes_RunxGenes.pdf'), 
+       width = 16, height = 8)
+
+VlnPlot(aa, features = genes, group.by = 'time', split.by = 'celltype')
 
 ##########################################
 # subset batch 1 day3, 8, 11 
