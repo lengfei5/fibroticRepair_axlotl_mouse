@@ -436,6 +436,20 @@ aa = readRDS(file = paste0(RdataDir,
 ggs = rownames(aa)
 ggs = get_geneName(ggs)
 
+which(ggs == "KAZALD1")[2]
+Idents(aa) = factor(aa$condition, levels = c("BL_3and5dpa", "BL_8dpa", "BL_11dpa"))
+DotPlot(aa, features = rownames(aa)[which(ggs == "KAZALD1")[2]]
+       ) + RotatedAxis()
+
+
+xx = aa@assays$RNA$data[which(ggs == "KAZALD1")[2], ]
+xx = data.frame(xx, colnames(aa), aa$condition)
+colnames(xx) = c('logNorm_expression', 'cellID', 'axolotl_blastema_timePoint')
+
+
+write.csv2(xx, file = paste0(resDir, 'axolotlLimb_blastema_geneExpression_Kazald1.csv'), 
+           quote = FALSE, row.names = TRUE)
+
 # ## change the annotation the M5 macrophage to epidermis  
 # kk = which(aa$subtypes == 'FB7.PITX2+.SIX1+')
 # 
