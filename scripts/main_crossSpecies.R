@@ -1040,7 +1040,6 @@ ggsave(filename = paste0(resDir, '/axolotl_macrophage_subtypes_v3.pdf'),
 
 
 
-
 ##########################################
 # find all DE genes for axolotl and mouse
 ##########################################
