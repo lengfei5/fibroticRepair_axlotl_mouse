@@ -1039,6 +1039,13 @@ ggsave(filename = paste0(resDir, '/axolotl_macrophage_subtypes_v3.pdf'),
        width = 6, height = 4)
 
 
+DimPlot(ax, group.by = 'cluster', label = TRUE, repel =  TRUE, split.by = "time") + 
+  #theme_classic() +
+  theme(axis.text.x = element_text(angle = 0, size = 14, vjust = 0.4),
+        axis.text.y = element_text(angle = 0, size = 14)) +
+  scale_color_manual(values=cols_macrophage) 
+
+
 
 ##########################################
 # find all DE genes for axolotl and mouse
@@ -1048,6 +1055,19 @@ Idents(mm) = mm$subtypes
 markers.ax = FindAllMarkers(ax, logfc.threshold = 0.25, min.pct = 0.1)
 
 cat(length(unique(markers.ax$gene)), ' markers found in ax\n')
+
+markers.ax %>%
+  group_by(cluster) %>%
+  dplyr::filter(avg_log2FC > 0.3) %>%
+  slice_head(n = 10) %>%
+  ungroup() -> top10
+DoHeatmap(ax, features = top10$gene) + NoLegend()
+
+ggsave(filename = paste0(resDir, 
+                         '/Tobie_batch1Data_umap_axloltol_BL_celltypes_macrophageSubcluseters_top30Markers.pdf'), 
+       width = 8, height = 20)
+
+
 #markers.mm = FindAllMarkers(mm, logfc.threshold = 0.5, min.pct = 0.1)
 #saveRDS(markers.mm, file = paste0(RdataDir, 'mm_scRNAseq_for_crossSpecies_v3_markersAll.rds'))
 markers.mm = readRDS(file = paste0(RdataDir, 'mm_scRNAseq_for_crossSpecies_v3_markersAll.rds'))
@@ -1084,6 +1104,41 @@ mm2 = match(an_orthologs$query, markers.mm$gene)
 kk = intersect(which(!is.na(mm1)), which(!is.na(mm2)))
 
 an_orthologs = an_orthologs[kk, ]
+
+markers.ax_ortholog = markers.ax[!is.na(match(markers.ax$gene, an_orthologs$ref)), ] 
+markers.mm_ortholog = markers.mm[!is.na(match(markers.mm$gene, an_orthologs$query)), ]
+
+markers.ax_ortholog %>%
+  group_by(cluster) %>%
+  dplyr::filter(avg_log2FC > 0.5) %>%
+  dplyr::filter(cluster  ==  'M4') %>%
+  slice_head(n = 30) %>%
+  ungroup() -> top10
+
+FeaturePlot(mm, features = top10$gene)
+
+ggsave(filename = paste0(resDir, 
+                         '/Tobie_batch1Data_umap_axloltol_BL_celltypes_M4_top30Markers.pdf'), 
+       width = 16, height = 20)
+
+
+
+markers.mm_ortholog %>%
+  group_by(cluster) %>%
+  dplyr::filter(avg_log2FC > 0.5) %>%
+  #slice_head(n = 30) %>%
+  ungroup() -> top10_contrast
+
+genes_uniq = top10$gene[is.na(match(top10$gene, top10_contrast$gene))]
+
+DoHeatmap(ax, features = genes_uniq) + NoLegend()
+
+ggsave(filename = paste0(resDir, 
+                         '/Tobie_batch1Data_umap_axloltol_BL_celltypes_macrophageSubcluseters_top30Markers.pdf'), 
+       width = 8, height = 20)
+
+
+
 
 an_orthologs$tfs = FALSE
 an_orthologs$tfs[which(!is.na(match(toupper(an_orthologs$query), c(tfs, sps))))] = TRUE
@@ -1137,7 +1192,7 @@ cols = colorRampPalette(c(rev(RColorBrewer::brewer.pal(9, "Blues")),
 br = seq((min(cort$r)), max(abs(cort$r)), length.out = 101)
 cols = cols[!(br>max(cort$r) | br<min(cort$r))]
 
-ggplot()+
+ggplot() +
   geom_point(data = plot_df, mapping = aes(x = Var2, 
                                            y = factor(Var1, levels = c('M3', 'M5', 'M1', 'M2', 'M4')), 
                                                                 fill = value), 
