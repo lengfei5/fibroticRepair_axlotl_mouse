@@ -1122,7 +1122,6 @@ ggsave(filename = paste0(resDir,
        width = 16, height = 20)
 
 
-
 markers.mm_ortholog %>%
   group_by(cluster) %>%
   dplyr::filter(avg_log2FC > 0.5) %>%
