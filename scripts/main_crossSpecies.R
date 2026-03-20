@@ -1112,14 +1112,18 @@ markers.ax_ortholog %>%
   group_by(cluster) %>%
   dplyr::filter(avg_log2FC > 0.5) %>%
   dplyr::filter(cluster  ==  'M4') %>%
-  slice_head(n = 30) %>%
+  slice_head(n = 100) %>%
   ungroup() -> top10
 
-FeaturePlot(mm, features = top10$gene)
+genes = top10$gene
+genes = setdiff(genes, c('Hk2', 'Oaf', 'Col5a2', 'Srgap3', 'Bcar3', 'Pmp22', 'Chst11', 'Myo5a', 'Frrs1', 
+                         'Prkch', 'Ccr1', 'Tbxas1', 'Aebp1', 'Ptpn22', 'Rusc2', 'Ctsk', 'Sdc1', ))
+
+FeaturePlot(mm, features = top10$gene, ncol = 10)
 
 ggsave(filename = paste0(resDir, 
-                         '/Tobie_batch1Data_umap_axloltol_BL_celltypes_M4_top30Markers.pdf'), 
-       width = 16, height = 20)
+                         '/Tobie_batch1Data_umap_axloltol_BL_celltypes_M4_top50Markers_v2.pdf'), 
+       width = 25, height = 40)
 
 
 markers.mm_ortholog %>%
