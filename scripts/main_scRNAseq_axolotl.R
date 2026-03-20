@@ -110,7 +110,17 @@ p1 + p2
 
 ggsave(filename = paste0(resDir, '/Tobie_umap.harmony_axloltol_BL_celltypes.pdf'), width = 18, height = 6)
 
+p1 = DimPlot(aa, group.by = 'celltype', label = TRUE, repel = TRUE) + NoLegend()
+#p2 = FeaturePlot(aa, features = c("CD68-AMEX60DD012740", "CD53-AMEX60DD008686", "APOE-AMEX60DD018143"))
+p2 = FeaturePlot(aa, features = c("AMEX60DD012740", "AMEX60DD008686", "AMEX60DD018143"))
+
+
+p1/p2
+
+
+
 saveRDS(aa, file = paste0(RdataDir, '/axoltol_limb_Blatema_twoBacthes_harmonyMerged_fromTobi_seuratV4.rds'))
+
 
 
 ## subsetting cell types excluding blood cells
@@ -176,12 +186,37 @@ saveRDS(aa, file = paste0(RdataDir,
 
 
 
+aa = subset(aa, cells = colnames(aa)[which(aa$batch == 'batch1')])
+aa = NormalizeData(aa, normalization.method = "LogNormalize", scale.factor = 10000)
+aa <- FindVariableFeatures(aa, selection.method = "vst", nfeatures = 8000) # find subset-specific HVGs
+
+aa <- ScaleData(aa)
+
+aa <- RunPCA(aa, features = VariableFeatures(object = aa), verbose = FALSE, weight.by.var = TRUE)
+
+ElbowPlot(aa, ndims = 50)
+
+aa <- RunUMAP(aa, reduction = "pca", dims = 1:50, n.neighbors = 50,  min.dist = 0.3)
+
+p1 = DimPlot(aa, group.by = 'time', label = TRUE, repel = TRUE)
+p2 = DimPlot(aa, group.by = 'celltype', label = TRUE, repel = TRUE)
+
+p1 + p2
+
+
+saveRDS(aa, file = paste0(RdataDir, 
+                        '/axoltol_limbBlatema_batch1_inclBlood_fromTobi_geneNames_seuratV5.rds'))
+
+
+
 ##########################################
 # double check some marker genes of RUNX for Elly 
 ##########################################
 aa = readRDS(paste0(RdataDir, 
                     '/axoltol_limb_Blatema_twoBacthes_harmonyMerged_fromTobi_',
                     'filterCelltypes_geneNames.rds'))
+
+
 
 aa = NormalizeData(aa, normalization.method = "LogNormalize", scale.factor = 10000)
 aa <- FindVariableFeatures(aa, selection.method = "vst", nfeatures = 8000) # find subset-specific HVGs
@@ -202,6 +237,13 @@ ggsave(filename = paste0(resDir, '/Tobie_umap.harmony_axloltol_BL_celltypes_Runx
        width = 16, height = 8)
 
 VlnPlot(aa, features = genes, group.by = 'time', split.by = 'celltype')
+
+
+p1 = DimPlot(aa, group.by = 'celltype', label = TRUE, repel = TRUE) + NoLegend()
+p2 = FeaturePlot(aa, features = c("CD68-AMEX60DD012740", "CD53-AMEX60DD008686", "APOE-AMEX60DD018143"))
+
+p1/p2
+
 
 ##########################################
 # subset batch 1 day3, 8, 11 
@@ -498,10 +540,20 @@ if(Running_UMAP){
 ##########################################
 # search for marker genes for immune cells  
 ##########################################
+#aa = readRDS(file = paste0(RdataDir, 
+#                           '/axoltol_limbBlatema_batch1_inclBlood_fromTobi_geneNames_seuratV5.rds'))
+aa = readRDS(file = paste0(RdataDir, 
+                          '/axoltol_limbBlatema_batch1_inclBlood_fromTobi_geneNames_seuratV5.rds'))
+
+aa <- ScaleData(aa, features = rownames(aa))
 p1 = DimPlot(aa, group.by = 'time', label = TRUE, repel = TRUE)
 p2 = DimPlot(aa, group.by = 'celltype', label = TRUE, repel = TRUE)
 
 p1 + p2
+
+aa = subset(aa, cells = colnames(aa)[which(aa$celltype != "Skeletal muscle" & 
+                                             aa$celltype != "Hematopoietic progenitors" &
+                                             aa$celltype != "Thrombocytes")])
 
 aa$celltype2 = aa$celltype
 
@@ -519,14 +571,33 @@ markers.ax %>%
   dplyr::filter(avg_log2FC > 0.5) %>%
   slice_head(n = 50) %>%
   ungroup() -> top10
+
+ggs = top10$gene[which(top10$cluster == 'immune_cells')]
+ggs = ggs[grep('^AME|^LOC', ggs, invert = TRUE)]
+ggs = ggs[order(ggs)]
+
 DoHeatmap(aa, features = top10$gene) + NoLegend()
 
 p1= DimPlot(aa, group.by = 'celltype', label = TRUE, repel = TRUE)
-p2 = FeaturePlot(aa, features = c("CD68-AMEX60DD012740", "CD53-AMEX60DD008686", "APOE-AMEX60DD018143"))
+p2 = FeaturePlot(aa, features = c("CD68-AMEX60DD012740",  "APOE-AMEX60DD018143", "CD53-AMEX60DD008686",
+                                  "RAC2-AMEX60DD029329", "CORO1A-AMEX60DD028400"))
 
 p1/p2
 
-rownames(aa)[grep('CD45', rownames(aa))]
+ggsave(filename = paste0(resDir, '/batch1Data_umap_axloltol_BL_immuneCell_markerGenes_v1.pdf'), 
+       width = 12, height = 18)
+
+
+aa$celltype = factor(aa$celltype, levels = c("Macrophages", 'Neutrophils', 'T cells', 'B cells', 
+                                             "Eosinophils/Killer cells", "Erythrocytes", "Schwann cells", 
+                                             "Endothelial cells", 'Epidermis', "Connective Tissue"))
+
+VlnPlot(aa, features = c("CD68-AMEX60DD012740", "APOE-AMEX60DD018143", "CD53-AMEX60DD008686", 
+                         "RAC2-AMEX60DD029329", "CORO1A-AMEX60DD028400"), group.by = 'celltype')
+
+ggsave(filename = paste0(resDir, '/batch1Data_umap_axloltol_BL_immuneCell_markerGenes_VlnPlot.pdf'), 
+       width = 12, height = 8)
+
 
 ##########################################
 # double check the macrophage and FB cell types markers 
